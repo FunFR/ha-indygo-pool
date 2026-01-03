@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from homeassistant.components.select import SelectEntity, SelectEntityDescription
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.config_entries import ConfigEntry
 
 from .const import DOMAIN
 from .coordinator import IndygoPoolDataUpdateCoordinator
@@ -47,7 +47,9 @@ class IndygoPoolSelect(IndygoPoolEntity, SelectEntity):
         """Initialize."""
         super().__init__(coordinator)
         self.entity_description = entity_description
-        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{entity_description.key}"
+        self._attr_unique_id = (
+            f"{coordinator.config_entry.entry_id}_{entity_description.key}"
+        )
 
     @property
     def current_option(self) -> str | None:

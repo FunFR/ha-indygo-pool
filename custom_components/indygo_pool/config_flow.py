@@ -12,7 +12,7 @@ from .api import (
     IndygoPoolApiClientCommunicationError,
     IndygoPoolApiClientError,
 )
-from .const import CONF_EMAIL, CONF_PASSWORD, DOMAIN, LOGGER
+from .const import CONF_EMAIL, CONF_PASSWORD, DOMAIN
 
 
 class IndygoPoolFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
@@ -63,6 +63,4 @@ class IndygoPoolFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             password=password,
             session=async_get_clientsession(self.hass),
         )
-        # For now, we just placeholder the validation
-        # await client.async_get_data()
-        pass
+        await client.async_login()

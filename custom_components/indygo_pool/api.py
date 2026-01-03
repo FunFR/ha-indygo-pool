@@ -2,18 +2,24 @@
 
 from __future__ import annotations
 
-import asyncio
+import json
+import re
 import socket
+
 import aiohttp
 import async_timeout
+from bs4 import BeautifulSoup
 
 from .const import LOGGER
+
 
 class IndygoPoolApiClientError(Exception):
     """Exception to indicate a general API error."""
 
+
 class IndygoPoolApiClientAuthenticationError(IndygoPoolApiClientError):
     """Exception to indicate an authentication error."""
+
 
 class IndygoPoolApiClientCommunicationError(IndygoPoolApiClientError):
     """Exception to indicate a communication error."""
@@ -66,10 +72,6 @@ class IndygoPoolApiClient:
 
     def _parse_data(self, html: str) -> dict:
         """Parse the HTML response and extract JSON variables."""
-        import json
-        import re
-        from bs4 import BeautifulSoup
-
         data = {}
         soup = BeautifulSoup(html, "html.parser")
         scripts = soup.find_all("script")
@@ -87,7 +89,9 @@ class IndygoPoolApiClient:
                     LOGGER.error("Failed to parse pool JSON: %s", e)
 
             # Extract var modules
-            modules_match = re.search(r"var modules\s*=\s*(\[.*?\]);", script.string, re.DOTALL)
+            modules_match = re.search(
+                r"var modules\s*=\s*(\[.*?\]);", script.string, re.DOTALL
+            )
             if modules_match:
                 try:
                     data["modules"] = json.loads(modules_match.group(1))
@@ -95,7 +99,9 @@ class IndygoPoolApiClient:
                     LOGGER.error("Failed to parse modules JSON: %s", e)
 
             # Extract var poolCommand
-            command_match = re.search(r"var poolCommand\s*=\s*({.*?});", script.string, re.DOTALL)
+            command_match = re.search(
+                r"var poolCommand\s*=\s*({.*?});", script.string, re.DOTALL
+            )
             if command_match:
                 try:
                     data["poolCommand"] = json.loads(command_match.group(1))
@@ -130,7 +136,7 @@ class IndygoPoolApiClient:
                 response.raise_for_status()
                 return await response.text()
 
-        except asyncio.TimeoutError as exception:
+        except TimeoutError as exception:
             raise IndygoPoolApiClientCommunicationError(
                 "Timeout error fetching information",
             ) from exception

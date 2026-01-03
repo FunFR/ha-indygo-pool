@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import IndygoPoolApiClient
-from .const import CONF_EMAIL, CONF_PASSWORD, DOMAIN, LOGGER
+from .const import CONF_EMAIL, CONF_PASSWORD, DOMAIN
 from .coordinator import IndygoPoolDataUpdateCoordinator
 
 PLATFORMS: list[Platform] = [
