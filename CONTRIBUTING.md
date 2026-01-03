@@ -1,6 +1,6 @@
-# Development
+# Contributing to Indygo Pool
 
-This document outlines how to set up your development environment for the **Indygo Pool** integration.
+This document outlines how to set up your development environment and contribute to the **Indygo Pool** integration.
 
 ## 🛠️ Development Environment
 
@@ -59,9 +59,9 @@ Then run the integration tests using:
 uv run pytest -s -m integration tests
 ```
 
-### Manual Testing
+### Manual Config Testing
 
-To test the integration in a real Home Assistant environment:
+To test the integration in a local Home Assistant environment:
 
 1. Create a `config` directory in the root of the project.
 2. Link the custom component:
@@ -73,6 +73,18 @@ To test the integration in a real Home Assistant environment:
    ```bash
    uv run hass -c config
    ```
+
+### Remote Deployment (Real HAOS)
+
+To quickly deploy your local changes to a remote Home Assistant instance (e.g., HAOS on a VM/Pi) without committing to Git:
+
+```bash
+scp -r custom_components/indygo_pool root@<HA_IP>:/config/custom_components/
+```
+
+> **Note**: This requires the **SSH & Web Terminal** add-on in Home Assistant.
+
+After copying, **restart Home Assistant** to apply changes.
 
 ## ✨ Code Quality
 
@@ -96,7 +108,7 @@ We use `pre-commit` to ensure code quality before every commit.
    uv run pre-commit run --all-files
    ```
 
-## 🤝 Contributing
+## 🤝 Contributing Process
 
 1. Fork the repository.
 2. Create a feature branch (`git checkout -b feature/amazing-feature`).
