@@ -3,7 +3,7 @@ name = "ha-indygo-pool"
 version = "0.1.0"
 description = "Home Assistant integration for Indygo Pool"
 authors = [
-    { name = "Brice Messeca" }
+    { name = "FunFR" }
 ]
 license = { text = "Apache-2.0" }
 dependencies = [

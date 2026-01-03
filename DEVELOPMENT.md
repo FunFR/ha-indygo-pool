@@ -16,7 +16,7 @@ The recommended way to develop for Home Assistant is using [Visual Studio Code](
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/brice.messeca/ha-indygo-pool.git
+   git clone https://github.com/FunFR/ha-indygo-pool.git
    cd ha-indygo-pool
    ```
 

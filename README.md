@@ -45,11 +45,11 @@ This integration is not affiliated with or endorsed by MyIndygo. It uses a scrap
 
 [hacs]: https://github.com/hacs/integration
 [hacs-shield]: https://img.shields.io/badge/HACS-Custom-orange.svg
-[last-commit-shield]: https://img.shields.io/github/last-commit/brice.messeca/ha-indygo-pool
-[releases]: https://github.com/brice.messeca/ha-indygo-pool/releases
-[releases-shield]: https://img.shields.io/github/release/brice.messeca/ha-indygo-pool.svg
-[repo]: https://github.com/brice.messeca/ha-indygo-pool
-[issues]: https://github.com/brice.messeca/ha-indygo-pool/issues
-[issues-shield]: https://img.shields.io/github/issues/brice.messeca/ha-indygo-pool.svg
-[maintainability]: https://codeclimate.com/github/brice.messeca/ha-indygo-pool/maintainability
-[maintainability-shield]: https://img.shields.io/codeclimate/maintainability/brice.messeca/ha-indygo-pool
+[last-commit-shield]: https://img.shields.io/github/last-commit/FunFR/ha-indygo-pool
+[releases]: https://github.com/FunFR/ha-indygo-pool/releases
+[releases-shield]: https://img.shields.io/github/release/FunFR/ha-indygo-pool.svg
+[repo]: https://github.com/FunFR/ha-indygo-pool
+[issues]: https://github.com/FunFR/ha-indygo-pool/issues
+[issues-shield]: https://img.shields.io/github/issues/FunFR/ha-indygo-pool.svg
+[maintainability]: https://codeclimate.com/github/FunFR/ha-indygo-pool/maintainability
+[maintainability-shield]: https://img.shields.io/codeclimate/maintainability/FunFR/ha-indygo-pool
