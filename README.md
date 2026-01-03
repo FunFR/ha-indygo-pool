@@ -1,0 +1,55 @@
+# Indygo Pool for Home Assistant
+
+[![GitHub Release][releases-shield]][releases]
+[![GitHub Last Commit][last-commit-shield]][repo]
+[![GitHub Issues][issues-shield]][issues]
+[![HACS][hacs-shield]][hacs]
+[![Maintainability][maintainability-shield]][maintainability]
+
+Indygo Pool is a custom integration for Home Assistant that allows you to monitor and control your MyIndygo connected pool solution.
+
+## Features
+
+- **Temperature Monitoring**: Keep an eye on your pool's water temperature.
+- **pH & Salt levels**: Monitor the chemical balance of your pool.
+- **Filtration Control**: View and change the filtration mode (Off, Auto, On, Forced).
+- **Electrolyser Status**: Monitor the production status.
+- **Boost Mode**: Activate and monitor the boost mode.
+
+## Installation
+
+### HACS (Recommended)
+
+1. Open HACS in your Home Assistant instance.
+2. Click on the three dots in the top right corner and select "Custom repositories".
+3. Add the URL of this repository and select "Integration" as the category.
+4. Click "Add" and then install the "Indygo Pool" integration.
+5. Restart Home Assistant.
+
+### Manual
+
+1. Download the latest release.
+2. Copy the `indygo_pool` directory from `custom_components` to your Home Assistant `config/custom_components` directory.
+3. Restart Home Assistant.
+
+## Configuration
+
+1. Go to **Settings** > **Devices & Services**.
+2. Click **Add Integration**.
+3. Search for **Indygo Pool**.
+4. Enter your MyIndygo credentials (email and password).
+
+## Disclaimer
+
+This integration is not affiliated with or endorsed by MyIndygo. It uses a scraper to retrieve data from the MyIndygo website. Use it at your own risk.
+
+[hacs]: https://github.com/hacs/integration
+[hacs-shield]: https://img.shields.io/badge/HACS-Custom-orange.svg
+[last-commit-shield]: https://img.shields.io/github/last-commit/brice.messeca/ha-indygo-pool
+[releases]: https://github.com/brice.messeca/ha-indygo-pool/releases
+[releases-shield]: https://img.shields.io/github/release/brice.messeca/ha-indygo-pool.svg
+[repo]: https://github.com/brice.messeca/ha-indygo-pool
+[issues]: https://github.com/brice.messeca/ha-indygo-pool/issues
+[issues-shield]: https://img.shields.io/github/issues/brice.messeca/ha-indygo-pool.svg
+[maintainability]: https://codeclimate.com/github/brice.messeca/ha-indygo-pool/maintainability
+[maintainability-shield]: https://img.shields.io/codeclimate/maintainability/brice.messeca/ha-indygo-pool

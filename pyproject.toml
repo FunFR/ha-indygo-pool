@@ -1,0 +1,31 @@
+[project]
+name = "ha-indygo-pool"
+version = "0.1.0"
+description = "Home Assistant integration for Indygo Pool"
+authors = [
+    { name = "Brice Messeca" }
+]
+license = { text = "Apache-2.0" }
+dependencies = [
+    "beautifulsoup4>=4.12.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest-homeassistant-custom-component",
+    "pytest",
+    "ruff",
+    "mypy",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "PL"]
+ignore = ["PLR0913"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = [".git", "testing_config"]

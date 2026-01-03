@@ -1,0 +1,16 @@
+{
+    "domain": "indygo_pool",
+    "name": "Indygo Pool",
+    "codeowners": [
+        "@funfr"
+    ],
+    "config_flow": true,
+    "documentation": "https://github.com/brice.messeca/ha-indygo-pool",
+    "integration_type": "hub",
+    "iot_class": "cloud_polling",
+    "issue_tracker": "https://github.com/brice.messeca/ha-indygo-pool/issues",
+    "requirements": [
+        "beautifulsoup4==4.12.3"
+    ],
+    "version": "0.1.0"
+}

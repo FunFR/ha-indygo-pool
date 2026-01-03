@@ -1,0 +1,22 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Indygo Pool Configuration",
+                "description": "Please enter your MyIndygo credentials.",
+                "data": {
+                    "email": "Email",
+                    "password": "Password"
+                }
+            }
+        },
+        "error": {
+            "auth": "Invalid credentials",
+            "connection": "Communication error",
+            "unknown": "Unknown error"
+        },
+        "abort": {
+            "already_configured": "Device is already configured"
+        }
+    }
+}
