@@ -62,11 +62,12 @@ class IndygoPoolSensor(IndygoPoolEntity, SensorEntity):
         super().__init__(coordinator)
         self._sensor_id = sensor_data["id"]
         self._attr_unique_id = f"{sensor_data['id']}"
-        self._attr_name = (
+        sensor_name = (
             sensor_data.get("getName")
             or sensor_data.get("getEquipmentName")
             or "Unknown Sensor"
         )
+        self._attr_name = f"{module_name} {sensor_name}"
 
         # Determine device class and unit
         name_lower = self._attr_name.lower()
@@ -79,7 +80,7 @@ class IndygoPoolSensor(IndygoPoolEntity, SensorEntity):
             self._attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
             self._attr_state_class = SensorStateClass.MEASUREMENT
         elif "ph" in name_lower:
-            self._attr_device_class = SensorDeviceClass.PH
+            self._attr_device_class = getattr(SensorDeviceClass, "PH", None)
             self._attr_state_class = SensorStateClass.MEASUREMENT
         elif "redox" in name_lower or "orp" in name_lower:
             self._attr_native_unit_of_measurement = "mV"
@@ -99,9 +100,20 @@ class IndygoPoolSensor(IndygoPoolEntity, SensorEntity):
                     for sensor in module["inputs"]:
                         if sensor["id"] == self._sensor_id:
                             # Value might be in 'value' or 'lastValue.value'
-                            if "value" in sensor:
-                                return sensor.get("value")
-                            if "lastValue" in sensor and "value" in sensor["lastValue"]:
-                                return sensor["lastValue"]["value"]
+                            val = sensor.get("value")
+                            if val is None and "lastValue" in sensor:
+                                val = sensor["lastValue"].get("value")
+
+                            if val is not None:
+                                return val
+
+                            # Fallback to pool data for temperature and pH
+                            # if missing in module
+                            pool_data = self.coordinator.data.get("pool", {})
+                            if self._attr_device_class == SensorDeviceClass.TEMPERATURE:
+                                return pool_data.get("temperature")
+                            if self._attr_device_class == SensorDeviceClass.PH:
+                                return pool_data.get("ph")
+
                             return None
         return None

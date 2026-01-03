@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import IndygoPoolApiClient
-from .const import CONF_EMAIL, CONF_PASSWORD, DOMAIN
+from .const import CONF_EMAIL, CONF_PASSWORD, CONF_POOL_ID, DOMAIN
 from .coordinator import IndygoPoolDataUpdateCoordinator
 
 PLATFORMS: list[Platform] = [
@@ -25,6 +25,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         email=entry.data[CONF_EMAIL],
         password=entry.data[CONF_PASSWORD],
         session=async_get_clientsession(hass),
+        pool_id=entry.data.get(CONF_POOL_ID),
     )
 
     coordinator = IndygoPoolDataUpdateCoordinator(

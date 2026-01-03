@@ -12,7 +12,7 @@ from .api import (
     IndygoPoolApiClientCommunicationError,
     IndygoPoolApiClientError,
 )
-from .const import CONF_EMAIL, CONF_PASSWORD, DOMAIN
+from .const import CONF_EMAIL, CONF_PASSWORD, CONF_POOL_ID, DOMAIN
 
 
 class IndygoPoolFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
@@ -51,6 +51,7 @@ class IndygoPoolFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 {
                     vol.Required(CONF_EMAIL): str,
                     vol.Required(CONF_PASSWORD): str,
+                    vol.Required(CONF_POOL_ID): str,
                 }
             ),
             errors=errors,

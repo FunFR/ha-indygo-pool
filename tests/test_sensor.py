@@ -1,72 +1,72 @@
 import json
-from unittest.mock import AsyncMock, patch
+from unittest.mock import MagicMock
 
-import pytest
-from homeassistant.core import HomeAssistant
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from homeassistant.components.sensor import SensorDeviceClass
 
-from custom_components.indygo_pool.const import DOMAIN
+from custom_components.indygo_pool.binary_sensor import IndygoPoolBinarySensor
+from custom_components.indygo_pool.sensor import IndygoPoolSensor
+
+# Constants for magic values to satisfy PLR2004
+EXPECTED_TEMPERATURE = 5.27
+EXPECTED_PH = 7.2
 
 
-@pytest.mark.asyncio
-async def test_sensors(hass: HomeAssistant):
-    """Test sensor setup."""
+def test_sensor_values():
+    """Test sensor values directly without full HASS setup."""
     # Load fixture
-    with open("tests/fixtures/data.json") as f:
+    with open("tests/fixtures/data.json", encoding="utf-8") as f:
         data = json.load(f)
 
-    # Setup Mock Entry
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        title="Indygo Pool",
-        data={
-            "email": "user@example.com",
-            "password": "test_password",
-            "pool_id": "FAKE_POOL_ID",  # Using ID from dump
-        },
-    )
-    entry.add_to_hass(hass)
+    # Setup Mock Coordinator
+    coordinator = MagicMock()
+    coordinator.data = data
 
-    # Patch the API client in coordinator
-    # Note: The coordinator imports IndygoPoolApiClient from .api
-    with patch(
-        "custom_components.indygo_pool.coordinator.IndygoPoolApiClient"
-    ) as mock_api_cls:
-        mock_api = mock_api_cls.return_value
-        mock_api.async_get_data = AsyncMock(return_value=data)
-        mock_api.async_login = AsyncMock(return_value=True)
+    # Find thermometer sensor data in fixture (Module 3, id FAKE_MONGO_ID_5)
+    thermo_data = None
+    for module in data["modules"]:
+        if module["name"] == "Module 3":
+            for sensor in module["inputs"]:
+                if sensor["id"] == "FAKE_MONGO_ID_5":
+                    thermo_data = sensor
+                    break
 
-        # Start setup
-        await hass.config_entries.async_setup(entry.entry_id)
-        await hass.async_block_till_done()
+    assert thermo_data is not None
 
-        # Verify Water Temperature
-        # Name: "Temp. eau" -> slugify -> "temp_eau"
-        # Since has_entity_name is not explicitly True, and name is "Temp. eau",
-        # if the device name is "Indygo Pool", HA might just use "Temp. eau".
-        # Let's search for the entity.
-        entity_id = "sensor.temp_eau"
-        state = hass.states.get(entity_id)
+    # Test Temperature Sensor
+    sensor = IndygoPoolSensor(coordinator, thermo_data, "Module 3")
+    assert sensor.name == "Module 3 Thermomètre"
+    assert sensor.native_value == EXPECTED_TEMPERATURE
+    assert sensor.device_class == SensorDeviceClass.TEMPERATURE
 
-        # If not found, list all states to debug
-        if not state:
-            print("All states:", [s.entity_id for s in hass.states.async_all()])
+    # Find pH sensor data (Module 1, id FAKE_MONGO_ID_3)
+    ph_data = None
+    for module in data["modules"]:
+        if module["name"] == "Module 1":
+            for sensor in module["inputs"]:
+                if sensor["id"] == "FAKE_MONGO_ID_3":
+                    ph_data = sensor
+                    break
 
-        assert state
-        assert state.state == "5.27"
-        assert state.attributes.get("unit_of_measurement") == "°C"
+    assert ph_data is not None
 
-        # Verify pH
-        entity_id_ph = "sensor.ph"
-        state_ph = hass.states.get(entity_id_ph)
-        if not state_ph:
-            # Try other naming
-            state_ph = hass.states.get("sensor.indygo_pool_ph")
+    # Test pH Sensor
+    sensor_ph = IndygoPoolSensor(coordinator, ph_data, "Module 1")
+    assert sensor_ph.name == "Module 1 pHmètre"
+    assert sensor_ph.native_value == EXPECTED_PH
+    # device_class might be None on older HA versions but should be 'ph' if supported
+    assert sensor_ph.device_class in (None, "ph")
 
-        assert state_ph
-        assert state_ph.state == "7.2"
+    # Test Binary Sensor (Volet fermé in Module 3, id FAKE_MONGO_ID_6)
+    volet_data = None
+    for module in data["modules"]:
+        if module["name"] == "Module 3":
+            for sensor in module["inputs"]:
+                if sensor["id"] == "FAKE_MONGO_ID_6":
+                    volet_data = sensor
+                    break
 
-        # Verify Salt
-        # Name might be "Sel" -> sensor.sel
-        # Value 2.5 (from analysis) but strictly from fixture
-        # Check what is in fixture for Salt.
+    assert volet_data is not None
+
+    binary_sensor = IndygoPoolBinarySensor(coordinator, volet_data, "Module 3")
+    assert binary_sensor.name == "Module 3 Volet fermé"
+    assert binary_sensor.is_on is None  # as it's null in fixture

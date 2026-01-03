@@ -62,11 +62,12 @@ class IndygoPoolBinarySensor(IndygoPoolEntity, BinarySensorEntity):
         super().__init__(coordinator)
         self._sensor_id = sensor_data["id"]
         self._attr_unique_id = f"{sensor_data['id']}"
-        self._attr_name = (
+        sensor_name = (
             sensor_data.get("getName")
             or sensor_data.get("getEquipmentName")
             or "Unknown Sensor"
         )
+        self._attr_name = f"{module_name} {sensor_name}"
 
         # Determine device class
         # For Shutter/Volet:
