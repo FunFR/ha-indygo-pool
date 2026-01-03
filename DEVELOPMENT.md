@@ -49,7 +49,7 @@ This document outlines how to set up your development environment for the **Indy
 
 ### Automated Tests
 
-We use `pytest` for testing. Run unit tests with:
+We use `pytest` for testing. Run tests with:
 
 ```bash
 pytest tests
@@ -68,19 +68,7 @@ pool_id=your_pool_id
 Then run the integration tests using:
 
 ```bash
-# In Dev Container
-pytest -s -m integration tests/test_api.py
-```
-
-*Note: The `pytest-homeassistant-custom-component` plugin might block external network access by default. If you encounter `socket.socket` errors, you can run tests with `-p no:homeassistant_custom_component`.*
-
-### Troubleshooting
-
-#### DNS/Network Issues
-If you encounter errors like `Channel.getaddrinfo() takes 3 positional arguments...`, it is likely due to a conflict between `aiohttp` and `aiodns`. You can resolve this by uninstalling `aiodns`:
-
-```bash
-pip uninstall aiodns pycares -y
+pytest -s -m integration tests
 ```
 
 ### Manual Testing
