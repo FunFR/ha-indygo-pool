@@ -2,11 +2,7 @@
 
 from __future__ import annotations
 
-import socket
-
-import aiohttp
-import async_timeout
-from playwright.async_api import Browser, BrowserContext, Page, async_playwright
+from playwright.async_api import Browser, Page, async_playwright
 
 from .const import LOGGER
 
@@ -30,42 +26,22 @@ class IndygoPoolApiClient:
         self,
         email: str,
         password: str,
-        session: aiohttp.ClientSession,
-        pool_id: str | None = None,
+        pool_id: str,
     ) -> None:
-        """Indygo Pool API Client."""
+        """Initialize Indygo Pool API Client."""
         self._email = email
         self._password = password
-        self._session = session
         self._pool_id = pool_id
-        self._is_logged_in = False
         self._browser: Browser | None = None
-        self._context: BrowserContext | None = None
-
-    async def async_login(self) -> bool:
-        """Login to the API."""
-        await self._api_wrapper(
-            method="post",
-            url="https://myindygo.com/login",
-            data={
-                "email": self._email,
-                "password": self._password,
-            },
-        )
-        self._is_logged_in = True
-        return True
 
     async def async_get_data(self) -> dict:
         """Get data from the API using Playwright to execute JavaScript."""
-        if not self._pool_id:
-            raise IndygoPoolApiClientError("Pool ID is required")
-
         try:
             async with async_playwright() as p:
                 # Launch browser in headless mode
                 self._browser = await p.chromium.launch(headless=True)
-                self._context = await self._browser.new_context()
-                page = await self._context.new_page()
+                context = await self._browser.new_context()
+                page = await context.new_page()
 
                 # Navigate to login page
                 await page.goto("https://myindygo.com/login")
@@ -145,40 +121,3 @@ class IndygoPoolApiClient:
         except Exception as e:
             LOGGER.error("Error extracting data from page: %s", e)
             raise IndygoPoolApiClientError(f"Failed to extract data: {e}") from e
-
-    async def _api_wrapper(
-        self,
-        method: str,
-        url: str,
-        data: dict | None = None,
-        headers: dict | None = None,
-    ) -> any:
-        """Get information from the API."""
-        try:
-            async with async_timeout.timeout(10):
-                response = await self._session.request(
-                    method=method,
-                    url=url,
-                    data=data,
-                    headers=headers,
-                )
-                if response.status in (401, 403):
-                    raise IndygoPoolApiClientAuthenticationError(
-                        "Invalid credentials",
-                    )
-                response.raise_for_status()
-                return await response.text()
-
-        except TimeoutError as exception:
-            raise IndygoPoolApiClientCommunicationError(
-                "Timeout error fetching information",
-            ) from exception
-        except (aiohttp.ClientError, socket.gaierror) as exception:
-            raise IndygoPoolApiClientCommunicationError(
-                "Error fetching information",
-            ) from exception
-        except Exception as exception:  # pylint: disable=broad-except
-            LOGGER.error("API call failed: %s", exception)
-            raise IndygoPoolApiClientError(
-                f"Something really wrong happened: {exception}"
-            ) from exception
