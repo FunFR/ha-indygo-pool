@@ -43,6 +43,9 @@ The recommended way to develop for Home Assistant is using [Visual Studio Code](
    # Install dependencies
    pip install --upgrade pip
    pip install -e ".[dev]"
+
+   # Install Playwright browsers (required for data scraping)
+   playwright install chromium
    ```
 
 ## 🧪 Testing

@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import json
-import re
 import socket
 
 import aiohttp
 import async_timeout
-from bs4 import BeautifulSoup
+from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 
 from .const import LOGGER
 
@@ -41,6 +39,8 @@ class IndygoPoolApiClient:
         self._session = session
         self._pool_id = pool_id
         self._is_logged_in = False
+        self._browser: Browser | None = None
+        self._context: BrowserContext | None = None
 
     async def async_login(self) -> bool:
         """Login to the API."""
@@ -56,62 +56,95 @@ class IndygoPoolApiClient:
         return True
 
     async def async_get_data(self) -> dict:
-        """Get data from the API."""
-        if not self._is_logged_in:
-            await self.async_login()
-
+        """Get data from the API using Playwright to execute JavaScript."""
         if not self._pool_id:
             raise IndygoPoolApiClientError("Pool ID is required")
 
-        html = await self._api_wrapper(
-            method="get",
-            url=f"https://myindygo.com/pools/{self._pool_id}/devices",
-        )
+        try:
+            async with async_playwright() as p:
+                # Launch browser in headless mode
+                self._browser = await p.chromium.launch(headless=True)
+                self._context = await self._browser.new_context()
+                page = await self._context.new_page()
 
-        return self._parse_data(html)
+                # Navigate to login page
+                await page.goto("https://myindygo.com/login")
 
-    def _parse_data(self, html: str) -> dict:
-        """Parse the HTML response and extract JSON variables."""
-        data = {}
-        soup = BeautifulSoup(html, "html.parser")
-        scripts = soup.find_all("script")
+                # Fill in login form
+                await page.fill('input[name="email"]', self._email)
+                await page.fill('input[name="password"]', self._password)
 
-        for script in scripts:
-            if not script.string:
-                continue
+                # Submit form and wait for navigation
+                await page.click('button[type="submit"]')
+                await page.wait_for_load_state("networkidle")
 
-            # Extract var pool
-            pool_match = re.search(r"var pool\s*=\s*({.*?});", script.string, re.DOTALL)
-            if pool_match:
-                try:
-                    data["pool"] = json.loads(pool_match.group(1))
-                except json.JSONDecodeError as e:
-                    LOGGER.error("Failed to parse pool JSON: %s", e)
+                # Navigate to devices page
+                await page.goto(f"https://myindygo.com/pools/{self._pool_id}/devices")
 
-            # Extract var modules
-            modules_match = re.search(
-                r"var modules\s*=\s*(\[.*?\]);", script.string, re.DOTALL
+                # Wait for JavaScript to load the data
+                await page.wait_for_load_state("networkidle")
+
+                # Give extra time for JavaScript execution
+                await page.wait_for_timeout(2000)
+
+                # Extract JavaScript variables from the page
+                data = await self._extract_data_from_page(page)
+
+                await self._browser.close()
+                return data
+
+        except Exception as exception:
+            LOGGER.error("Failed to get data with Playwright: %s", exception)
+            if self._browser:
+                await self._browser.close()
+            raise IndygoPoolApiClientError(
+                f"Failed to retrieve pool data: {exception}"
+            ) from exception
+
+    async def _extract_data_from_page(self, page: Page) -> dict:
+        """Extract pool, modules, and poolCommand from the page's JavaScript context."""
+        try:
+            # Extract the JavaScript variables directly from the page context
+            pool_data = await page.evaluate(
+                "() => typeof pool !== 'undefined' ? pool : null"
             )
-            if modules_match:
-                try:
-                    data["modules"] = json.loads(modules_match.group(1))
-                except json.JSONDecodeError as e:
-                    LOGGER.error("Failed to parse modules JSON: %s", e)
-
-            # Extract var poolCommand
-            command_match = re.search(
-                r"var poolCommand\s*=\s*({.*?});", script.string, re.DOTALL
+            modules_data = await page.evaluate(
+                "() => typeof modules !== 'undefined' ? modules : null"
             )
-            if command_match:
-                try:
-                    data["poolCommand"] = json.loads(command_match.group(1))
-                except json.JSONDecodeError as e:
-                    LOGGER.error("Failed to parse poolCommand JSON: %s", e)
+            pool_command_data = await page.evaluate(
+                "() => typeof poolCommand !== 'undefined' ? poolCommand : null"
+            )
 
-        if not data:
-            raise IndygoPoolApiClientError("Could not find pool data in the page")
+            data = {}
 
-        return data
+            if pool_data:
+                data["pool"] = pool_data
+                LOGGER.debug("Successfully extracted pool data")
+            else:
+                LOGGER.warning("pool variable not found in page context")
+
+            if modules_data:
+                data["modules"] = modules_data
+                LOGGER.debug(
+                    "Successfully extracted modules data: %d modules", len(modules_data)
+                )
+            else:
+                LOGGER.warning("modules variable not found in page context")
+
+            if pool_command_data:
+                data["poolCommand"] = pool_command_data
+                LOGGER.debug("Successfully extracted poolCommand data")
+            else:
+                LOGGER.warning("poolCommand variable not found in page context")
+
+            if not data:
+                raise IndygoPoolApiClientError("Could not find pool data in the page")
+
+            return data
+
+        except Exception as e:
+            LOGGER.error("Error extracting data from page: %s", e)
+            raise IndygoPoolApiClientError(f"Failed to extract data: {e}") from e
 
     async def _api_wrapper(
         self,
