@@ -4,13 +4,10 @@ This document outlines how to set up your development environment for the **Indy
 
 ## 🛠️ Development Environment
 
-The recommended way to develop for Home Assistant is using [Visual Studio Code](https://code.visualstudio.com/) with the [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension.
-
 ### Prerequisites
 
-- [Docker](https://www.docker.com/get-started)
-- [Visual Studio Code](https://code.visualstudio.com/)
-- [Dev Containers Extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
+- [Python 3.9+](https://www.python.org/downloads/)
+- [Git](https://git-scm.com/)
 
 ### Getting Started
 
@@ -20,32 +17,32 @@ The recommended way to develop for Home Assistant is using [Visual Studio Code](
    cd ha-indygo-pool
    ```
 
-2. **Open in VS Code**:
-   ```bash
-   code .
-   ```
-
-3. **Dev Container**:
-   - Ensure the **Dev Containers** extension is installed.
-   - Open the Command Palette (`Cmd+Shift+P` on Mac, `Ctrl+Shift+P` on Windows/Linux).
-   - Type and select: **"Dev Containers: Reopen in Container"**.
-   - *Note: Pre-commit hooks are automatically installed and configured when the container is built.*
-
-3. **Local Virtual Environment (Alternative)**:
-   If you prefer not to use Docker, you can set up a local Python environment:
+2. **Create and activate virtual environment**:
    ```bash
    # Create virtual environment
    python3 -m venv .venv
 
    # Activate it
-   source .venv/bin/activate
+   source .venv/bin/activate  # On macOS/Linux
+   # or
+   .venv\Scripts\activate  # On Windows
+   ```
 
-   # Install dependencies
+3. **Install dependencies**:
+   ```bash
+   # Upgrade pip
    pip install --upgrade pip
+
+   # Install the package in editable mode with dev dependencies
    pip install -e ".[dev]"
 
    # Install Playwright browsers (required for data scraping)
    playwright install chromium
+   ```
+
+4. **Install pre-commit hooks**:
+   ```bash
+   pre-commit install
    ```
 
 ## 🧪 Testing
@@ -75,25 +72,12 @@ Then run the integration tests using:
 pytest -s -m integration tests/test_api.py
 ```
 
-or with docker:
-
-```bash
-docker build -t indygo-dev -f .devcontainer/Dockerfile .
-
-docker run --rm \
--v $(pwd):/workspaces/indygo-pool \
--w /workspaces/indygo-pool \
---env-file .env \
-indygo-dev \
-/bin/bash -c "pip install -e '.[dev]' && pip uninstall pytest-homeassistant-custom-component aiodns pycares -y && pytest -s -m integration tests/test_api.py"
-```
-
 *Note: The `pytest-homeassistant-custom-component` plugin might block external network access by default. If you encounter `socket.socket` errors, you can run tests with `-p no:homeassistant_custom_component`.*
 
 ### Troubleshooting
 
-#### DNS Issues in Docker/Linux
-If you encounter errors like `Channel.getaddrinfo() takes 3 positional arguments...`, it is likely due to a conflict between `aiohttp` and `aiodns` in certain environments. You can resolve this by uninstalling `aiodns`:
+#### DNS/Network Issues
+If you encounter errors like `Channel.getaddrinfo() takes 3 positional arguments...`, it is likely due to a conflict between `aiohttp` and `aiodns`. You can resolve this by uninstalling `aiodns`:
 
 ```bash
 pip uninstall aiodns pycares -y
