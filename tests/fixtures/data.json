@@ -1,0 +1,614 @@
+{
+  "pool": {
+    "id": "FAKE_POOL_ID",
+    "ph": 7.2,
+    "temperature": 5.27,
+    "volume": 11,
+    "updatedAt": "2026-01-03T15:58:05.798Z"
+  },
+  "modules": [
+    {
+      "id": "FAKE_MODULE_ID_1",
+      "name": "Module 1",
+      "defaultName": "Module 1 Default",
+      "type": "ipx",
+      "metadata": {
+        "isDistributionBoard": false,
+        "isPoolEdge": false,
+        "isEmecBoard": false
+      },
+      "inputs": [
+        {
+          "name": "",
+          "type": 0,
+          "subType": 0,
+          "unit": 0,
+          "interval": 0,
+          "expression": "x",
+          "expressionInverse": "x",
+          "lowThreshold": null,
+          "highThreshold": null,
+          "pushAlert": true,
+          "settings": [
+            {
+              "lowDebitThreshold": 2147483647,
+              "lowDebitThresholdAction": 0,
+              "nominalDebit": 2147483647,
+              "settlingTimeOn": 0,
+              "settlingTimeOff": 0,
+              "leakAlertVolume": 2147483647,
+              "highDebitThreshold": 2147483647,
+              "highDebitThresholdAction": 0,
+              "alert": true
+            },
+            {
+              "lowDebitThreshold": 2147483647,
+              "lowDebitThresholdAction": 0,
+              "nominalDebit": 2147483647,
+              "settlingTimeOn": 0,
+              "settlingTimeOff": 0,
+              "leakAlertVolume": 2147483647,
+              "highDebitThreshold": 2147483647,
+              "highDebitThresholdAction": 0,
+              "alert": true
+            }
+          ],
+          "actions": [
+            {
+              "type": 0,
+              "outputs": 0,
+              "schedule": 0,
+              "on": 0,
+              "off": 0,
+              "duration": 0
+            },
+            {
+              "type": 0,
+              "outputs": 0,
+              "schedule": 0,
+              "on": 0,
+              "off": 0,
+              "duration": 0
+            }
+          ],
+          "index": 2,
+          "module": "FAKE_MONGO_ID_1",
+          "mailAlert": true,
+          "isLastMeasureBeyondThresholds": false,
+          "hasFaultyProbe": false,
+          "doNotSendActionToPermanentOff": false,
+          "createdAt": "2023-06-24T17:39:04.908Z",
+          "updatedAt": "2025-11-23T12:41:09.831Z",
+          "realyUpdated": false,
+          "realyUpdatedAt": "2023-06-24T17:41:18.858Z",
+          "sentAt": "2024-09-22T11:00:16.923Z",
+          "actionThreshold": {
+            "program": {
+              "thresholdExceeded": {
+                "action": 0,
+                "waterBudget": 0
+              },
+              "betweenThresholds": {
+                "action": 0,
+                "waterBudget": 0
+              },
+              "thresholdNotReached": {
+                "action": 0,
+                "waterBudget": 0
+              }
+            }
+          },
+          "id": "FAKE_MONGO_ID_2",
+          "typeIsCumulativeData": false,
+          "typeIsMoistureSensor": false,
+          "typeIsTemperatureSensor": false,
+          "typeIsDoorSensor": false,
+          "typeIsTOR": false,
+          "isBusConnectedSensor": false,
+          "typeIsMultiLevelSensor": false,
+          "getPicto": "/images/pictos/drop_reverse.svg",
+          "getName": "Non renseign\u00e9",
+          "getEquipmentName": "Non renseign\u00e9"
+        },
+        {
+          "name": "",
+          "type": 6,
+          "subType": 0,
+          "unit": 4,
+          "interval": 30,
+          "expression": "x/100.0",
+          "expressionInverse": "x*100.0",
+          "lowThreshold": null,
+          "highThreshold": null,
+          "pushAlert": false,
+          "settings": [
+            {
+              "lowDebitThreshold": 2147483647,
+              "lowDebitThresholdAction": 0,
+              "nominalDebit": 2147483647,
+              "settlingTimeOn": 0,
+              "settlingTimeOff": 0,
+              "leakAlertVolume": 2147483647,
+              "highDebitThreshold": 2147483647,
+              "highDebitThresholdAction": 0,
+              "alert": true
+            },
+            {
+              "lowDebitThreshold": 2147483647,
+              "lowDebitThresholdAction": 0,
+              "nominalDebit": 2147483647,
+              "settlingTimeOn": 0,
+              "settlingTimeOff": 0,
+              "leakAlertVolume": 2147483647,
+              "highDebitThreshold": 2147483647,
+              "highDebitThresholdAction": 0,
+              "alert": true
+            }
+          ],
+          "actions": [
+            {
+              "type": 0,
+              "outputs": 0,
+              "schedule": 0,
+              "on": 0,
+              "off": 0,
+              "duration": 0
+            },
+            {
+              "type": 0,
+              "outputs": 0,
+              "schedule": 0,
+              "on": 0,
+              "off": 0,
+              "duration": 0
+            }
+          ],
+          "index": 1,
+          "module": "FAKE_MONGO_ID_1",
+          "mailAlert": true,
+          "isLastMeasureBeyondThresholds": false,
+          "hasFaultyProbe": false,
+          "doNotSendActionToPermanentOff": false,
+          "createdAt": "2023-06-24T17:39:04.908Z",
+          "updatedAt": "2025-11-23T12:41:09.830Z",
+          "lastHighThresholdAlertSent": null,
+          "lastLowThresholdAlertSent": null,
+          "realyUpdated": false,
+          "realyUpdatedAt": "2024-09-22T11:00:14.637Z",
+          "sentAt": "2024-09-22T11:00:17.036Z",
+          "lastValue": {
+            "value": 7.2,
+            "date": "2025-11-23T12:40:34.000Z"
+          },
+          "actionThreshold": {
+            "program": {
+              "thresholdExceeded": {
+                "action": 0,
+                "waterBudget": 0
+              },
+              "betweenThresholds": {
+                "action": 0,
+                "waterBudget": 0
+              },
+              "thresholdNotReached": {
+                "action": 0,
+                "waterBudget": 0
+              }
+            }
+          },
+          "id": "FAKE_MONGO_ID_3",
+          "typeIsCumulativeData": false,
+          "typeIsMoistureSensor": false,
+          "typeIsTemperatureSensor": false,
+          "typeIsDoorSensor": false,
+          "typeIsTOR": false,
+          "isBusConnectedSensor": false,
+          "typeIsMultiLevelSensor": false,
+          "getPicto": "/images/dashboard/dashboard_ph.svg",
+          "getName": "pHm\u00e8tre",
+          "getEquipmentName": "pHm\u00e8tre"
+        }
+      ],
+      "ipxData": {
+        "configurationChanged": {
+          "FAKE_ID_a7b9": "2024-09-22T11:00:14.479Z",
+          "FAKE_ID_a7b8": "2024-09-22T11:00:14.479Z"
+        },
+        "configurationCode": "24211063",
+        "receiveMobileAlerts": {
+          "0": true,
+          "1": true,
+          "2": true,
+          "3": true,
+          "4": false,
+          "5": true,
+          "6": true,
+          "7": true,
+          "8": true,
+          "9": true,
+          "10": true,
+          "11": true,
+          "12": true,
+          "13": true,
+          "14": true,
+          "15": true,
+          "16": true,
+          "17": true,
+          "18": true,
+          "19": true
+        },
+        "receiveEmailAlerts": {
+          "0": true,
+          "1": true,
+          "2": true,
+          "3": true,
+          "4": false,
+          "5": true,
+          "6": true,
+          "7": true,
+          "8": true,
+          "9": true,
+          "10": true,
+          "11": true,
+          "12": true,
+          "13": true,
+          "14": true,
+          "15": true,
+          "16": true,
+          "17": true,
+          "18": true,
+          "19": true
+        },
+        "remainingTimeElectrolyseDurationInPercent": 0,
+        "totalElectrolyseDuration": 1253,
+        "totalElectrolyseDurationCurrent": {
+          "value": 1253,
+          "date": "2025-11-23T12:41:09.845Z"
+        },
+        "deviceState": {
+          "shutterEntry": false,
+          "cmdEntry": false,
+          "flowEntry": false,
+          "canPhEntry": false,
+          "boostEnabled": false,
+          "testProd": false,
+          "pHInjection": false,
+          "cellPolaruty": true,
+          "prodStatus": false
+        },
+        "softCommandCard": "3.1",
+        "serialNumber": "FAKE_SN_12345",
+        "tagProtocolVersion": 6,
+        "totalElectrolyseDurationTheDayBefore": {
+          "value": 1253,
+          "date": "2025-11-22T14:02:45.698Z"
+        },
+        "cellVoltage": 0,
+        "receiveEmailAlert": true,
+        "receiveMobileAlert": true
+      }
+    },
+    {
+      "id": "FAKE_MODULE_ID_2",
+      "name": "Module 2",
+      "defaultName": "Module 2 Default",
+      "type": "lr-mb-10",
+      "metadata": {
+        "isDistributionBoard": false,
+        "isPoolEdge": false,
+        "isEmecBoard": false
+      },
+      "inputs": []
+    },
+    {
+      "id": "FAKE_MODULE_ID_3",
+      "name": "Module 3",
+      "defaultName": "Module 3 Default",
+      "type": "lr-pc",
+      "metadata": {
+        "isDistributionBoard": false,
+        "isPoolEdge": false,
+        "isEmecBoard": false,
+        "isPoolPower": false,
+        "isLRPower": false,
+        "isVistapool": false,
+        "isPoolLevelSensor": false
+      },
+      "inputs": [
+        {
+          "name": "",
+          "type": 5,
+          "subType": 0,
+          "unit": 2,
+          "interval": 15,
+          "expression": "x/100.0",
+          "expressionInverse": "x*100.0",
+          "lowThreshold": 2,
+          "highThreshold": 33,
+          "pushAlert": false,
+          "settings": [
+            {
+              "lowDebitThreshold": 2147483647,
+              "lowDebitThresholdAction": 0,
+              "nominalDebit": 2147483647,
+              "settlingTimeOn": 0,
+              "settlingTimeOff": 0,
+              "leakAlertVolume": 2147483647,
+              "highDebitThreshold": 2147483647,
+              "highDebitThresholdAction": 0,
+              "alert": true,
+              "shouldForcePushData": false
+            },
+            {
+              "lowDebitThreshold": 2147483647,
+              "lowDebitThresholdAction": 0,
+              "nominalDebit": 2147483647,
+              "settlingTimeOn": 0,
+              "settlingTimeOff": 0,
+              "leakAlertVolume": 2147483647,
+              "highDebitThreshold": 2147483647,
+              "highDebitThresholdAction": 0,
+              "alert": true,
+              "shouldForcePushData": false
+            },
+            {
+              "lowDebitThreshold": 2147483647,
+              "lowDebitThresholdAction": 0,
+              "nominalDebit": 2147483647,
+              "settlingTimeOn": 0,
+              "settlingTimeOff": 0,
+              "leakAlertVolume": 2147483647,
+              "highDebitThreshold": 2147483647,
+              "highDebitThresholdAction": 0,
+              "alert": true,
+              "shouldForcePushData": false
+            }
+          ],
+          "actions": [
+            {
+              "type": 0,
+              "outputs": 0,
+              "schedule": 0,
+              "on": 0,
+              "off": 0,
+              "duration": 0
+            },
+            {
+              "type": 0,
+              "outputs": 0,
+              "schedule": 0,
+              "on": 0,
+              "off": 0,
+              "duration": 0
+            }
+          ],
+          "index": 1,
+          "module": "FAKE_MONGO_ID_4",
+          "mailAlert": true,
+          "isLastMeasureBeyondThresholds": false,
+          "hasFaultyProbe": false,
+          "doNotSendActionToPermanentOff": false,
+          "createdAt": "2023-06-24T14:40:18.573Z",
+          "updatedAt": "2026-01-03T15:58:07.443Z",
+          "lastHighThresholdAlertSent": null,
+          "lastLowThresholdAlertSent": null,
+          "realyUpdated": false,
+          "realyUpdatedAt": "2023-06-24T14:55:31.917Z",
+          "sentAt": "2026-01-03T08:50:58.172Z",
+          "actionThreshold": {
+            "program": {
+              "thresholdExceeded": {
+                "action": 0,
+                "waterBudget": 0
+              },
+              "betweenThresholds": {
+                "action": 0,
+                "waterBudget": 0
+              },
+              "thresholdNotReached": {
+                "action": 0,
+                "waterBudget": 0
+              }
+            }
+          },
+          "channel": null,
+          "ipxData": {},
+          "metadata": {},
+          "pendingIpxData": {},
+          "id": "FAKE_MONGO_ID_5",
+          "typeIsCumulativeData": false,
+          "typeIsMoistureSensor": false,
+          "typeIsTemperatureSensor": true,
+          "typeIsDoorSensor": false,
+          "typeIsTOR": false,
+          "isBusConnectedSensor": false,
+          "typeIsMultiLevelSensor": false,
+          "getPicto": "/images/dashboard/dashboard_temperature.svg",
+          "getName": "Thermom\u00e8tre",
+          "getEquipmentName": "Thermom\u00e8tre"
+        },
+        {
+          "name": "",
+          "type": 16,
+          "subType": 0,
+          "unit": 0,
+          "interval": 1,
+          "expression": "x",
+          "expressionInverse": "x",
+          "lowThreshold": null,
+          "highThreshold": null,
+          "pushAlert": true,
+          "settings": [
+            {
+              "lowDebitThreshold": 2147483647,
+              "lowDebitThresholdAction": 0,
+              "nominalDebit": 2147483647,
+              "settlingTimeOn": 0,
+              "settlingTimeOff": 0,
+              "leakAlertVolume": 2147483647,
+              "highDebitThreshold": 2147483647,
+              "highDebitThresholdAction": 0,
+              "alert": true,
+              "shouldForcePushData": false
+            },
+            {
+              "lowDebitThreshold": 2147483647,
+              "lowDebitThresholdAction": 0,
+              "nominalDebit": 2147483647,
+              "settlingTimeOn": 0,
+              "settlingTimeOff": 0,
+              "leakAlertVolume": 2147483647,
+              "highDebitThreshold": 2147483647,
+              "highDebitThresholdAction": 0,
+              "alert": true,
+              "shouldForcePushData": false
+            },
+            {
+              "lowDebitThreshold": 2147483647,
+              "lowDebitThresholdAction": 0,
+              "nominalDebit": 2147483647,
+              "settlingTimeOn": 0,
+              "settlingTimeOff": 0,
+              "leakAlertVolume": 2147483647,
+              "highDebitThreshold": 2147483647,
+              "highDebitThresholdAction": 0,
+              "alert": true,
+              "shouldForcePushData": false
+            }
+          ],
+          "actions": [
+            {
+              "type": 0,
+              "outputs": 0,
+              "schedule": 0,
+              "on": 0,
+              "off": 0,
+              "duration": 0
+            },
+            {
+              "type": 0,
+              "outputs": 0,
+              "schedule": 0,
+              "on": 0,
+              "off": 0,
+              "duration": 0
+            }
+          ],
+          "index": 2,
+          "module": "FAKE_MONGO_ID_4",
+          "mailAlert": true,
+          "isLastMeasureBeyondThresholds": false,
+          "hasFaultyProbe": false,
+          "doNotSendActionToPermanentOff": false,
+          "createdAt": "2023-06-24T14:40:18.573Z",
+          "updatedAt": "2026-01-03T15:58:07.434Z",
+          "realyUpdated": false,
+          "sentAt": "2026-01-03T08:50:58.197Z",
+          "actionThreshold": {
+            "program": {
+              "thresholdExceeded": {
+                "action": 0,
+                "waterBudget": 0
+              },
+              "betweenThresholds": {
+                "action": 0,
+                "waterBudget": 0
+              },
+              "thresholdNotReached": {
+                "action": 0,
+                "waterBudget": 0
+              }
+            }
+          },
+          "channel": null,
+          "ipxData": {},
+          "metadata": {},
+          "pendingIpxData": {},
+          "realyUpdatedAt": "2026-01-03T08:50:43.191Z",
+          "id": "FAKE_MONGO_ID_6",
+          "typeIsCumulativeData": false,
+          "typeIsMoistureSensor": false,
+          "typeIsTemperatureSensor": false,
+          "typeIsDoorSensor": false,
+          "typeIsTOR": true,
+          "isBusConnectedSensor": false,
+          "typeIsMultiLevelSensor": false,
+          "getPicto": "/images/dashboard/volet_picto.svg",
+          "getName": "Volet ferm\u00e9",
+          "getEquipmentName": "Volet ferm\u00e9"
+        }
+      ]
+    }
+  ],
+  "poolCommand": {
+    "programs": [
+      {
+        "name": "",
+        "programCharacteristics": {
+          "programType": 4,
+          "mode": 2,
+          "rule": 1,
+          "isShutterDependant": false,
+          "auxiliaryCyclicDuration": 0,
+          "defaultProgramSpeed": 1,
+          "onSpeed": 1,
+          "frostFreeSpeed": 1,
+          "auxiliarySpeed": null,
+          "speedSequence": 4368,
+          "microFilteringSpeed": 1,
+          "microFilteringDuration": 10,
+          "microFilteringPeriod": 480,
+          "microFilteringTemperature": 5,
+          "adaptOffset": 0,
+          "isRandom": false,
+          "isUsingButton": false
+        },
+        "id": "FAKE_MONGO_ID_7"
+      },
+      {
+        "name": "",
+        "programCharacteristics": {
+          "programType": "",
+          "mode": 0,
+          "rule": 0,
+          "isShutterDependant": false,
+          "auxiliaryCyclicDuration": 0,
+          "defaultProgramSpeed": null,
+          "onSpeed": null,
+          "frostFreeSpeed": null,
+          "auxiliarySpeed": null,
+          "speedSequence": null,
+          "microFilteringSpeed": null,
+          "microFilteringDuration": null,
+          "microFilteringPeriod": null,
+          "microFilteringTemperature": null,
+          "isRandom": false,
+          "isUsingButton": false
+        },
+        "id": "FAKE_MONGO_ID_8"
+      },
+      {
+        "name": "",
+        "programCharacteristics": {
+          "programType": "",
+          "mode": 0,
+          "rule": 0,
+          "isShutterDependant": false,
+          "auxiliaryCyclicDuration": 0,
+          "defaultProgramSpeed": null,
+          "onSpeed": null,
+          "frostFreeSpeed": null,
+          "auxiliarySpeed": null,
+          "speedSequence": null,
+          "microFilteringSpeed": null,
+          "microFilteringDuration": null,
+          "microFilteringPeriod": null,
+          "microFilteringTemperature": null,
+          "isRandom": false,
+          "isUsingButton": false
+        },
+        "id": "FAKE_MONGO_ID_9"
+      }
+    ]
+  }
+}

@@ -72,6 +72,19 @@ Then run the integration tests using:
 pytest -s -m integration tests/test_api.py
 ```
 
+or with docker:
+
+```bash
+docker build -t indygo-dev -f .devcontainer/Dockerfile .
+
+docker run --rm \
+-v $(pwd):/workspaces/indygo-pool \
+-w /workspaces/indygo-pool \
+--env-file .env \
+indygo-dev \
+/bin/bash -c "pip install -e '.[dev]' && pip uninstall pytest-homeassistant-custom-component aiodns pycares -y && pytest -s -m integration tests/test_api.py"
+```
+
 *Note: The `pytest-homeassistant-custom-component` plugin might block external network access by default. If you encounter `socket.socket` errors, you can run tests with `-p no:homeassistant_custom_component`.*
 
 ### Troubleshooting
