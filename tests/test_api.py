@@ -9,6 +9,7 @@ from custom_components.indygo_pool.api import IndygoPoolApiClient
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 async def test_api_client_authentication():
     """Test API client authentication with real credentials from env."""
     email = os.getenv("email")

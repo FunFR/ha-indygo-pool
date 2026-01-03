@@ -53,8 +53,8 @@ pool_id=your_pool_id
 Then run the integration tests using:
 
 ```bash
-# In Dev Container or Local Env
-pytest -s tests/test_api.py
+# In Dev Container
+pytest -s -m integration tests/test_api.py
 ```
 
 *Note: The `pytest-homeassistant-custom-component` plugin might block external network access by default. If you encounter `socket.socket` errors, you can run tests with `-p no:homeassistant_custom_component`.*
