@@ -11,7 +11,7 @@ from .api import (
     IndygoPoolApiClientCommunicationError,
     IndygoPoolApiClientError,
 )
-from .const import CONF_EMAIL, CONF_PASSWORD, CONF_POOL_ID, DOMAIN
+from .const import CONF_EMAIL, CONF_PASSWORD, CONF_POOL_ID, DOMAIN, LOGGER
 
 
 class IndygoPoolFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
@@ -34,10 +34,13 @@ class IndygoPoolFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                     pool_id=user_input[CONF_POOL_ID],
                 )
             except IndygoPoolApiClientAuthenticationError:
+                LOGGER.exception("Authentication error during config flow")
                 errors["base"] = "auth"
             except IndygoPoolApiClientCommunicationError:
+                LOGGER.exception("Communication error during config flow")
                 errors["base"] = "connection"
             except IndygoPoolApiClientError:
+                LOGGER.exception("Unknown error during config flow")
                 errors["base"] = "unknown"
             else:
                 return self.async_create_entry(
@@ -59,10 +62,14 @@ class IndygoPoolFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def _test_credentials(self, email: str, password: str, pool_id: str) -> None:
         """Validate credentials."""
+        from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+        session = async_get_clientsession(self.hass)
         client = IndygoPoolApiClient(
             email=email,
             password=password,
             pool_id=pool_id,
+            session=session,
         )
         # Test credentials by attempting to get data
         await client.async_get_data()

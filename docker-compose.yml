@@ -1,0 +1,14 @@
+services:
+  homeassistant:
+    container_name: homeassistant
+    image: "ghcr.io/home-assistant/home-assistant:stable"
+    volumes:
+      - ./config:/config
+      - /etc/localtime:/etc/localtime:ro
+      # Mount the integration code into the container
+      - ./custom_components/indygo_pool:/config/custom_components/indygo_pool
+    ports:
+      - "8123:8123"
+    restart: unless-stopped
+    environment:
+      - TZ=Europe/Paris
