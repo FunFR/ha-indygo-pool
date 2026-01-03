@@ -7,6 +7,7 @@ This document outlines how to set up your development environment for the **Indy
 ### Prerequisites
 
 - [Python 3.9+](https://www.python.org/downloads/)
+- [uv](https://docs.astral.sh/uv/getting-started/installation/)
 - [Git](https://git-scm.com/)
 
 ### Getting Started
@@ -17,32 +18,19 @@ This document outlines how to set up your development environment for the **Indy
    cd ha-indygo-pool
    ```
 
-2. **Create and activate virtual environment**:
+2. **Sync dependencies and environment**:
    ```bash
-   # Create virtual environment
-   python3 -m venv .venv
-
-   # Activate it
-   source .venv/bin/activate  # On macOS/Linux
-   # or
-   .venv\Scripts\activate  # On Windows
+   uv sync --all-extras
    ```
 
-3. **Install dependencies**:
+3. **Install Playwright browsers**:
    ```bash
-   # Upgrade pip
-   pip install --upgrade pip
-
-   # Install the package in editable mode with dev dependencies
-   pip install -e ".[dev]"
-
-   # Install Playwright browsers (required for data scraping)
-   playwright install chromium
+   uv run playwright install chromium
    ```
 
 4. **Install pre-commit hooks**:
    ```bash
-   pre-commit install
+   uv run pre-commit install
    ```
 
 ## 🧪 Testing
@@ -52,7 +40,7 @@ This document outlines how to set up your development environment for the **Indy
 We use `pytest` for testing. Run tests with:
 
 ```bash
-pytest tests
+uv run pytest tests
 ```
 
 ### Integration Testing (Real Credentials)
@@ -68,7 +56,7 @@ pool_id=your_pool_id
 Then run the integration tests using:
 
 ```bash
-pytest -s -m integration tests
+uv run pytest -s -m integration tests
 ```
 
 ### Manual Testing
@@ -83,16 +71,16 @@ To test the integration in a real Home Assistant environment:
    ```
 3. Run Home Assistant pointing to this config:
    ```bash
-   hass -c config
+   uv run hass -c config
    ```
 
 ## ✨ Code Quality
 
 We use `ruff` for linting and formatting.
 
-- **Check**: `ruff check .`
-- **Fix**: `ruff check --fix .`
-- **Format**: `ruff format .`
+- **Check**: `uv run ruff check .`
+- **Fix**: `uv run ruff check --fix .`
+- **Format**: `uv run ruff format .`
 
 ### Pre-commit
 
@@ -100,12 +88,12 @@ We use `pre-commit` to ensure code quality before every commit.
 
 1. **Install hooks**:
    ```bash
-   pre-commit install
+   uv run pre-commit install
    ```
 
 2. **Run manually**:
    ```bash
-   pre-commit run --all-files
+   uv run pre-commit run --all-files
    ```
 
 ## 🤝 Contributing

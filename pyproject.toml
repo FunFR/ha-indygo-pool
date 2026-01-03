@@ -1,7 +1,12 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "ha-indygo-pool"
 version = "0.1.0"
 description = "Home Assistant integration for Indygo Pool"
+requires-python = ">=3.9"
 authors = [
     { name = "FunFR" }
 ]
