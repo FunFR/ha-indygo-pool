@@ -29,6 +29,7 @@ The recommended way to develop for Home Assistant is using [Visual Studio Code](
    - Ensure the **Dev Containers** extension is installed.
    - Open the Command Palette (`Cmd+Shift+P` on Mac, `Ctrl+Shift+P` on Windows/Linux).
    - Type and select: **"Dev Containers: Reopen in Container"**.
+   - *Note: Pre-commit hooks are automatically installed and configured when the container is built.*
 
 ## 🧪 Testing
 
