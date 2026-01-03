@@ -1,0 +1,51 @@
+{
+    "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+    "extends": [
+        "config:best-practices"
+    ],
+    "semanticCommits": "enabled",
+    "timezone": "Europe/Paris",
+    "dependencyDashboard": true,
+    "rebaseWhen": "conflicted",
+    "pre-commit": {
+        "enabled": true
+    },
+    "packageRules": [
+        {
+            "matchUpdateTypes": [
+                "minor",
+                "patch",
+                "pin",
+                "digest"
+            ],
+            "automerge": true,
+            "automergeType": "branch"
+        },
+        {
+            "matchDepTypes": [
+                "dependencies"
+            ],
+            "semanticCommitType": "fix"
+        },
+        {
+            "matchDepTypes": [
+                "optional-dependencies",
+                "dev",
+                "devDependencies"
+            ],
+            "semanticCommitType": "chore"
+        },
+        {
+            "matchManagers": [
+                "github-actions"
+            ],
+            "semanticCommitType": "ci"
+        },
+        {
+            "matchManagers": [
+                "pre-commit"
+            ],
+            "semanticCommitType": "chore"
+        }
+    ]
+}

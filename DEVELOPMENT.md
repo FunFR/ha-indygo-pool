@@ -31,6 +31,20 @@ The recommended way to develop for Home Assistant is using [Visual Studio Code](
    - Type and select: **"Dev Containers: Reopen in Container"**.
    - *Note: Pre-commit hooks are automatically installed and configured when the container is built.*
 
+3. **Local Virtual Environment (Alternative)**:
+   If you prefer not to use Docker, you can set up a local Python environment:
+   ```bash
+   # Create virtual environment
+   python3 -m venv .venv
+
+   # Activate it
+   source .venv/bin/activate
+
+   # Install dependencies
+   pip install --upgrade pip
+   pip install -e ".[dev]"
+   ```
+
 ## 🧪 Testing
 
 ### Automated Tests
@@ -113,6 +127,14 @@ We use `pre-commit` to ensure code quality before every commit.
 3. Commit your changes (`git commit -m 'Add some amazing feature'`).
 4. Push to the branch (`git push origin feature/amazing-feature`).
 5. Open a Pull Request.
+
+## 🤖 Automated Maintenance
+
+This repository uses **Renovate** to keep dependencies up to date automatically.
+
+- **Runtime Dependencies**: Renovate updates use the `fix` scope (e.g., `fix(deps): ...`), which **triggers a new patch release** via Semantic Release. HACS users will see an update.
+- **Dev/CI Dependencies**: Renovate updates use the `chore` or `ci` scope (e.g., `chore(deps): ...`), which **does NOT trigger a release**. The codebase is updated, but HACS users are not spammed with updates for internal changes.
+- **Auto-merge**: Minor and patch updates are automatically merged if the CI passes.
 
 ### Development Workflow
 
