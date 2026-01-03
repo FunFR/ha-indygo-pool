@@ -91,6 +91,20 @@ We use `ruff` for linting and formatting.
 - **Fix**: `ruff check --fix .`
 - **Format**: `ruff format .`
 
+### Pre-commit
+
+We use `pre-commit` to ensure code quality before every commit.
+
+1. **Install hooks**:
+   ```bash
+   pre-commit install
+   ```
+
+2. **Run manually**:
+   ```bash
+   pre-commit run --all-files
+   ```
+
 ## 🤝 Contributing
 
 1. Fork the repository.
