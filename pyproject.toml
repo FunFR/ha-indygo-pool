@@ -53,7 +53,7 @@ version_variables = ["custom_components/indygo_pool/manifest.json:version"]
 branch = "main"
 upload_to_pypi = false
 upload_to_release = true
-build_command = "pip install build && python -m build"
+build_command = "pip install uv build && uv lock && git add uv.lock && python -m build"
 
 [tool.semantic_release.commit_parser_options]
 allowed_tags = ["build", "chore", "ci", "docs", "feat", "fix", "perf", "style", "refactor", "test"]
