@@ -23,12 +23,9 @@ This document outlines how to set up your development environment and contribute
    uv sync --all-extras
    ```
 
-3. **Install Playwright browsers**:
-   ```bash
-   uv run playwright install chromium
-   ```
 
-4. **Install pre-commit hooks**:
+
+3. **Install pre-commit hooks**:
    ```bash
    uv run pre-commit install
    ```
