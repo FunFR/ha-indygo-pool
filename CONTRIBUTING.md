@@ -2,6 +2,27 @@
 
 This document outlines how to set up your development environment and contribute to the **Indygo Pool** integration.
 
+## Contribution guidelines
+
+Contributing to this project should be as easy and transparent as possible, whether it's:
+
+- Reporting a bug
+- Discussing the current state of the code
+- Submitting a fix
+- Proposing new features
+
+### Github is used for everything
+
+Github is used to host code, to track issues and feature requests, as well as accept pull requests.
+
+Pull requests are the best way to propose changes to the codebase.
+
+1. Fork the repo and create your branch from `main`.
+2. If you've changed something, update the documentation.
+3. Make sure your code lints (using pre-commit).
+4. Test your contribution.
+5. Issue that pull request!
+
 ## 🛠️ Development Environment
 
 ### Prerequisites
@@ -24,8 +45,6 @@ This document outlines how to set up your development environment and contribute
    ```bash
    uv sync --all-extras
    ```
-
-
 
 3. **Install pre-commit hooks**:
    ```bash
@@ -114,26 +133,3 @@ We use `pre-commit` to ensure code quality before every commit.
    ```bash
    uv run pre-commit run --all-files
    ```
-
-## 🤝 Contributing Process
-
-1. Fork the repository.
-2. Create a feature branch (`git checkout -b feature/amazing-feature`).
-3. Commit your changes (`git commit -m 'Add some amazing feature'`).
-4. Push to the branch (`git push origin feature/amazing-feature`).
-5. Open a Pull Request.
-
-## 🤖 Automated Maintenance
-
-This repository uses **Renovate** to keep dependencies up to date automatically.
-
-- **Runtime Dependencies**: Renovate updates use the `fix` scope (e.g., `fix(deps): ...`), which **triggers a new patch release** via Semantic Release. HACS users will see an update.
-- **Dev/CI Dependencies**: Renovate updates use the `chore` or `ci` scope (e.g., `chore(deps): ...`), which **does NOT trigger a release**. The codebase is updated, but HACS users are not spammed with updates for internal changes.
-- **Auto-merge**: Minor and patch updates are automatically merged if the CI passes.
-
-### Development Workflow
-
-1. Keep API logic in `api.py`.
-2. Map data in `coordinator.py`.
-3. Add entities in the respective platform files (`sensor.py`, `binary_sensor.py`, etc.).
-4. Always update `strings.json` if you add new configuration options or entities.
