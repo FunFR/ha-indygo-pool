@@ -12,7 +12,7 @@ from .api import (
     IndygoPoolApiClientCommunicationError,
     IndygoPoolApiClientError,
 )
-from .const import CONF_EMAIL, CONF_PASSWORD, DOMAIN
+from .const import CONF_EMAIL, CONF_PASSWORD, CONF_POOL_ID, DOMAIN, LOGGER
 
 
 class IndygoPoolFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
@@ -32,12 +32,16 @@ class IndygoPoolFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 await self._test_credentials(
                     email=user_input[CONF_EMAIL],
                     password=user_input[CONF_PASSWORD],
+                    pool_id=user_input[CONF_POOL_ID],
                 )
             except IndygoPoolApiClientAuthenticationError:
+                LOGGER.exception("Authentication error during config flow")
                 errors["base"] = "auth"
             except IndygoPoolApiClientCommunicationError:
+                LOGGER.exception("Communication error during config flow")
                 errors["base"] = "connection"
             except IndygoPoolApiClientError:
+                LOGGER.exception("Unknown error during config flow")
                 errors["base"] = "unknown"
             else:
                 return self.async_create_entry(
@@ -51,16 +55,21 @@ class IndygoPoolFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 {
                     vol.Required(CONF_EMAIL): str,
                     vol.Required(CONF_PASSWORD): str,
+                    vol.Required(CONF_POOL_ID): str,
                 }
             ),
             errors=errors,
         )
 
-    async def _test_credentials(self, email: str, password: str) -> None:
+    async def _test_credentials(self, email: str, password: str, pool_id: str) -> None:
         """Validate credentials."""
+
+        session = async_get_clientsession(self.hass)
         client = IndygoPoolApiClient(
             email=email,
             password=password,
-            session=async_get_clientsession(self.hass),
+            pool_id=pool_id,
+            session=session,
         )
-        await client.async_login()
+        # Test credentials by attempting to get data
+        await client.async_get_data()

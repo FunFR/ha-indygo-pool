@@ -1,7 +1,17 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["custom_components*"]
+exclude = ["tests", "config", "docs"]
+
 [project]
 name = "ha-indygo-pool"
 version = "0.1.0"
 description = "Home Assistant integration for Indygo Pool"
+requires-python = ">=3.9"
 authors = [
     { name = "FunFR" }
 ]
@@ -17,6 +27,12 @@ dev = [
     "ruff",
     "mypy",
     "pre-commit",
+]
+
+[dependency-groups]
+dev = [
+    "commitizen>=4.10.1",
+    "python-dotenv>=1.2.1",
 ]
 
 [tool.ruff]
@@ -43,11 +59,6 @@ build_command = "pip install build && python -m build"
 allowed_tags = ["build", "chore", "ci", "docs", "feat", "fix", "perf", "style", "refactor", "test"]
 minor_tags = ["feat"]
 patch_tags = ["fix", "perf"]
-
-[tool.semantic_release.changelog]
-changelog_file = ""
-# No changelog file generated in the repo, only in the release body
-exclude_commit_patterns = []
 
 [tool.semantic_release.remote]
 type = "github"

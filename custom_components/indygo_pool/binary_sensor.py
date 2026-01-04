@@ -5,7 +5,6 @@ from __future__ import annotations
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
-    BinarySensorEntityDescription,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -15,24 +14,6 @@ from .const import DOMAIN
 from .coordinator import IndygoPoolDataUpdateCoordinator
 from .entity import IndygoPoolEntity
 
-ENTITY_DESCRIPTIONS = (
-    BinarySensorEntityDescription(
-        key="filtration",
-        name="Filtration",
-        device_class=BinarySensorDeviceClass.RUNNING,
-    ),
-    BinarySensorEntityDescription(
-        key="electrolyser",
-        name="Electrolyser",
-        device_class=BinarySensorDeviceClass.RUNNING,
-    ),
-    BinarySensorEntityDescription(
-        key="boost",
-        name="Boost Mode",
-        device_class=BinarySensorDeviceClass.RUNNING,
-    ),
-)
-
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -41,13 +22,62 @@ async def async_setup_entry(
 ) -> None:
     """Set up the binary_sensor platform."""
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities(
-        IndygoPoolBinarySensor(
-            coordinator=coordinator,
-            entity_description=entity_description,
-        )
-        for entity_description in ENTITY_DESCRIPTIONS
-    )
+    entities = []
+
+    if not coordinator.data:
+        return
+
+    # Iterate over modules and add binary sensors based on flags
+    if "modules" in coordinator.data:
+        for module in coordinator.data["modules"]:
+            # General Module Sensors
+            for key, name, device_class in [
+                ("isOnline", "Online", BinarySensorDeviceClass.CONNECTIVITY),
+            ]:
+                if key in module:
+                    entities.append(
+                        IndygoPoolBinarySensor(
+                            coordinator=coordinator,
+                            module=module,
+                            key=key,
+                            name=name,
+                            device_class=device_class,
+                        )
+                    )
+
+            # IPX Specific Sensors
+            if module.get("type") == "ipx" and "ipxData" in module:
+                ipx_data = module["ipxData"]
+                if "deviceState" in ipx_data:
+                    device_state = ipx_data["deviceState"]
+
+                    # Shutter / Volet
+                    if "shutterEntry" in device_state:
+                        entities.append(
+                            IndygoPoolBinarySensor(
+                                coordinator=coordinator,
+                                module=module,
+                                key="shutterEntry",
+                                name="Shutter",
+                                device_class=BinarySensorDeviceClass.WINDOW,
+                                sub_path="ipxData.deviceState",
+                            )
+                        )
+
+                    # Flow / Débit
+                    if "flowEntry" in device_state:
+                        entities.append(
+                            IndygoPoolBinarySensor(
+                                coordinator=coordinator,
+                                module=module,
+                                key="flowEntry",
+                                name="Flow",
+                                device_class=BinarySensorDeviceClass.PROBLEM,
+                                sub_path="ipxData.deviceState",
+                            )
+                        )
+
+    async_add_entities(entities)
 
 
 class IndygoPoolBinarySensor(IndygoPoolEntity, BinarySensorEntity):
@@ -56,17 +86,48 @@ class IndygoPoolBinarySensor(IndygoPoolEntity, BinarySensorEntity):
     def __init__(
         self,
         coordinator: IndygoPoolDataUpdateCoordinator,
-        entity_description: BinarySensorEntityDescription,
+        module: dict,
+        key: str,
+        name: str,
+        device_class: BinarySensorDeviceClass | None,
+        sub_path: str | None = None,
     ) -> None:
         """Initialize."""
         super().__init__(coordinator)
-        self.entity_description = entity_description
-        self._attr_unique_id = (
-            f"{coordinator.config_entry.entry_id}_{entity_description.key}"
-        )
+        self._module_id = module.get("id")
+        self._key = key
+        self._sub_path = sub_path
+
+        # Unique ID: ModuleID_Key
+        self._attr_unique_id = f"{self._module_id}_{key}"
+        self._attr_name = f"{module.get('name')} {name}"
+        self._attr_device_class = device_class
 
     @property
     def is_on(self) -> bool | None:
         """Return true if the binary_sensor is on."""
-        # This will be mapped to the actual data structure once api.py is implemented
+        # Find the module again to get fresh data
+        if "modules" in self.coordinator.data:
+            for module in self.coordinator.data["modules"]:
+                if module.get("id") == self._module_id:
+                    # Check if we need to traverse a subpath (e.g. ipxData.deviceState)
+                    target = module
+                    if self._sub_path:
+                        for path_part in self._sub_path.split("."):
+                            target = target.get(path_part, {})
+
+                    val = target.get(self._key)
+
+                    # Handle boolean directly
+                    if isinstance(val, bool):
+                        return val
+
+                    # Handle numbers (1.0 = True?)
+                    if val is not None:
+                        try:
+                            return float(val) == 1.0
+                        except (ValueError, TypeError):
+                            pass
+
+                    return None
         return None
