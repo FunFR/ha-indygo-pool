@@ -4,7 +4,7 @@
 [![GitHub Last Commit][last-commit-shield]][repo]
 [![GitHub Issues][issues-shield]][issues]
 [![HACS][hacs-shield]][hacs]
-[![Maintainability][maintainability-shield]][maintainability]
+[![CI][ci-shield]][ci]
 
 Indygo Pool is a custom integration for Home Assistant that allows you to monitor and control your MyIndygo connected pool solution.
 
@@ -14,7 +14,6 @@ Indygo Pool is a custom integration for Home Assistant that allows you to monito
 - **pH & Salt levels**: Monitor the chemical balance of your pool.
 - **Filtration Control**: View and change the filtration mode (Off, Auto, On, Forced).
 - **Electrolyser Status**: Monitor the production status.
-- **Boost Mode**: Activate and monitor the boost mode.
 
 ## Installation
 
@@ -43,6 +42,12 @@ Indygo Pool is a custom integration for Home Assistant that allows you to monito
 
 This integration is not affiliated with or endorsed by MyIndygo. It uses a scraper to retrieve data from the MyIndygo website. Use it at your own risk.
 
+## Support
+
+If you found this integration helpful, feel free to buy me a coffee!
+
+<a href="https://buymeacoffee.com/funfr" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
+
 [hacs]: https://github.com/hacs/integration
 [hacs-shield]: https://img.shields.io/badge/HACS-Custom-orange.svg
 [last-commit-shield]: https://img.shields.io/github/last-commit/FunFR/ha-indygo-pool
@@ -51,5 +56,5 @@ This integration is not affiliated with or endorsed by MyIndygo. It uses a scrap
 [repo]: https://github.com/FunFR/ha-indygo-pool
 [issues]: https://github.com/FunFR/ha-indygo-pool/issues
 [issues-shield]: https://img.shields.io/github/issues/FunFR/ha-indygo-pool.svg
-[maintainability]: https://codeclimate.com/github/FunFR/ha-indygo-pool/maintainability
-[maintainability-shield]: https://img.shields.io/codeclimate/maintainability/FunFR/ha-indygo-pool
+[ci]: https://github.com/FunFR/ha-indygo-pool/actions/workflows/ci.yml
+[ci-shield]: https://github.com/FunFR/ha-indygo-pool/actions/workflows/ci.yml/badge.svg

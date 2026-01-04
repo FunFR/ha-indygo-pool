@@ -18,9 +18,10 @@ from .api import (
     IndygoPoolApiClientError,
 )
 from .const import DOMAIN, LOGGER
+from .models import IndygoPoolData
 
 
-class IndygoPoolDataUpdateCoordinator(DataUpdateCoordinator):
+class IndygoPoolDataUpdateCoordinator(DataUpdateCoordinator[IndygoPoolData]):
     """Class to manage fetching Indygo Pool data."""
 
     config_entry: ConfigEntry
@@ -39,7 +40,7 @@ class IndygoPoolDataUpdateCoordinator(DataUpdateCoordinator):
             update_interval=timedelta(minutes=5),
         )
 
-    async def _async_update_data(self):
+    async def _async_update_data(self) -> IndygoPoolData:
         """Update data via library."""
         try:
             return await self.client.async_get_data()

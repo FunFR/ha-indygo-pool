@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import json
-import re
 from http import HTTPStatus
 
 import aiohttp
 
 from .const import LOGGER
+from .models import IndygoPoolData
+from .parser import IndygoParser
 
 
 class IndygoPoolApiClientError(Exception):
@@ -38,6 +38,8 @@ class IndygoPoolApiClient:
         self._password = password
         self._pool_id = pool_id
         self._session = session
+        self._parser = IndygoParser()
+
         self._pool_address: str | None = None
         self._relay_id: str | None = None
         self._pool_metadata: dict | None = None
@@ -60,6 +62,14 @@ class IndygoPoolApiClient:
             }
 
             # Perform login
+            # First, fetch the login page to establish session/cookies
+            async with self._session.get(
+                "https://myindygo.com/login", headers=headers
+            ) as response_get:
+                if response_get.status != HTTPStatus.OK:
+                    LOGGER.warning("Initial GET /login failed: %s", response_get.status)
+
+            # Then POST credentials
             async with self._session.post(
                 "https://myindygo.com/login",
                 data=data,
@@ -72,25 +82,21 @@ class IndygoPoolApiClient:
                         f"text: {await response.text()}"
                     )
 
-                # Check if we got the session cookie
-
                 if response.status == HTTPStatus.FOUND:
-                    LOGGER.debug("Login successful (redirected)")
+                    location = response.headers.get("Location")
+                    LOGGER.debug("Login successful (redirected to %s)", location)
                 else:
-                    # If 200, we might be on the login page (failed auth)
-                    # or dashboard (already auth?)
                     LOGGER.warning(
                         "Login returned 200, expected 302. Content start: %s",
                         (await response.text())[:200],
                     )
-                    pass
 
         except aiohttp.ClientError as exception:
             raise IndygoPoolApiClientCommunicationError(
                 f"Error logging in: {exception}"
             ) from exception
 
-    async def async_ensure_discovery(self) -> None:  # noqa: PLR0912, PLR0915
+    async def async_ensure_discovery(self) -> None:
         """Ensure we have the internal pool IDs (address and relayId)."""
         if self._pool_address and self._relay_id:
             return
@@ -107,13 +113,11 @@ class IndygoPoolApiClient:
             # Fetch the devices page
             url = f"https://myindygo.com/pools/{self._pool_id}/devices"
             async with self._session.get(url, headers=headers) as response:
-                # Log where we actually landed
                 LOGGER.debug(
                     "Discovery URL: %s, Status: %s", response.url, response.status
                 )
 
                 if response.status != HTTPStatus.OK or "login" in str(response.url):
-                    # Maybe session expired? Try login again once
                     LOGGER.debug(
                         "Discovery failed or redirected to login, retrying auth..."
                     )
@@ -130,124 +134,23 @@ class IndygoPoolApiClient:
                 else:
                     text = await response.text()
 
-            # Extract currentPool
-            start_regex = re.compile(
-                r"(?:var|let|const|window\.)?\s*currentPool\s*=\s*(\{)", re.IGNORECASE
+            # Parse HTML
+            pool_address, relay_id, pool_metadata = self._parser.parse_pool_ids(
+                text, self._pool_id
             )
-            match = start_regex.search(text)
-            if match:
-                start_index = match.start(1)
-                json_str = self._extract_json_object(text, start_index)
-                if json_str:
-                    try:
-                        self._pool_metadata = json.loads(json_str)
-                    except json.JSONDecodeError as exc:
-                        LOGGER.error("Failed to decode currentPool JSON: %s", exc)
 
-            # Extract ipxModule (for salt, ph setpoint, etc.)
-            ipx_start_regex = re.compile(
-                r"(?:var|let|const|window\.)?\s*ipxModule\s*=\s*(\{)", re.IGNORECASE
-            )
-            ipx_match = ipx_start_regex.search(text)
-            if ipx_match:
-                ipx_start_index = ipx_match.start(1)
-                ipx_json_str = self._extract_json_object(text, ipx_start_index)
-                if ipx_json_str:
-                    try:
-                        self._ipx_module_metadata = json.loads(ipx_json_str)
-                    except json.JSONDecodeError as exc:
-                        LOGGER.error("Failed to decode ipxModule JSON: %s", exc)
-            else:
-                LOGGER.warning("Could not find ipxModule in HTML (discovery)")
+            # Parse IPX Module Metadata (from same page)
+            self._ipx_module_metadata = self._parser.parse_ipx_module(text)
 
-            if not self._pool_metadata:
+            if not pool_address or not relay_id:
                 LOGGER.error("HTML (truncated): %s", text[:1000])
-                raise IndygoPoolApiClientError(
-                    "Could not find valid 'currentPool' object in HTML."
-                )
-
-            # Extract IDs from currentPool
-            try:
-                # Find the main module (lr-pc or ipx)
-                if "modules" in self._pool_metadata:
-                    modules = self._pool_metadata["modules"]
-
-                    # Logic: Prioritize lr-pc (gateway + realy ID)
-                    lr_pc = next((m for m in modules if m.get("type") == "lr-pc"), None)
-                    if lr_pc:
-                        # Gateway serial is the LRMC/LRMB serial,
-                        # found via relay link usually,
-                        # BUT user observed URL pattern:
-                        # /module/{GATEWAY_SERIAL}/status/{RELAY_ID}
-                        # And found: Gateway LRMB10... (Serial 1000...)
-                        # -> Device LRPC... (ShortID F1E81E)
-
-                        # We need to find the gateway.
-                        # In the user's trace: Gateway was 'LRMB10-0B7519'
-                        # (type lr-mb-10).
-                        # Let's find a gateway-like module (lr-mb-10 or similar?)
-                        # or use the owner?
-
-                        # Actually simpler: The URL uses valid serials.
-                        # If we have an 'lr-mb-10', use its serial as the address.
-                        gateway = next(
-                            (m for m in modules if m.get("type") == "lr-mb-10"), None
-                        )
-                        if not gateway:
-                            # Fallback to current lr-pc if no separate gateway?
-                            # Or maybe the lr-pc IS the gateway in some setups?
-                            # For now, let's look for lr-mb-10 first.
-                            gateway = lr_pc  # Fallback assumption
-
-                        self._pool_address = gateway.get("serialNumber")
-
-                        # Relay ID is the short ID of the lr-pc
-                        # e.g. LRPC-F1E81E -> F1E81E.
-                        # It seems to be the last part of snake_case name or derived
-                        # from serial?
-                        name_parts = lr_pc.get("name", "").split("-")
-                        if len(name_parts) > 1:
-                            self._relay_id = name_parts[-1]
-                        else:
-                            self._relay_id = lr_pc.get("serialNumber")[
-                                -6:
-                            ]  # Guessing last 6 chars?
-
-                        LOGGER.debug(
-                            "Selected Strategy: Gateway %s (Serial %s) "
-                            "-> Device %s (ShortID %s)",
-                            gateway.get("name"),
-                            self._pool_address,
-                            lr_pc.get("name"),
-                            self._relay_id,
-                        )
-
-                    else:
-                        # Fallback for IPX only systems (older?)
-                        ipx = next((m for m in modules if m.get("type") == "ipx"), None)
-                        if ipx:
-                            self._pool_address = ipx.get("serialNumber")
-                            self._relay_id = ipx.get("ipxRelay")
-                            LOGGER.debug(
-                                "Selected Strategy: IPX Direct (Serial %s, Relay %s)",
-                                self._pool_address,
-                                self._relay_id,
-                            )
-                        else:
-                            raise IndygoPoolApiClientError(
-                                "No compatible module (lr-pc or ipx) found."
-                            )
-
-            except (KeyError, IndexError, TypeError) as exc:
-                LOGGER.error("Failed to parse pool IDs from JSON: %s", exc)
-                raise IndygoPoolApiClientError(
-                    "Failed to parse pool configuration."
-                ) from exc
-
-            if not self._pool_address or not self._relay_id:
                 raise IndygoPoolApiClientError(
                     "Could not determine Pool Address or Relay ID."
                 )
+
+            self._pool_address = pool_address
+            self._relay_id = relay_id
+            self._pool_metadata = pool_metadata
 
             LOGGER.debug(
                 "Discovered pool keys: gateway_serial=%s, device_short_id=%s",
@@ -260,36 +163,14 @@ class IndygoPoolApiClient:
                 f"Error during discovery: {exception}"
             ) from exception
 
-    def _extract_json_object(self, text: str, start_index: int) -> str | None:
-        """Extract a JSON object from text starting at start_index."""
-        brace_count = 0
-        in_string = False
-        escape = False
-
-        for i in range(start_index, len(text)):
-            char = text[i]
-
-            if in_string:
-                if escape:
-                    escape = False
-                elif char == "\\":
-                    escape = True
-                elif char == '"':
-                    in_string = False
-            elif char == '"':
-                in_string = True
-            elif char == "{":
-                brace_count += 1
-            elif char == "}":
-                brace_count -= 1
-                if brace_count == 0:
-                    return text[start_index : i + 1]
-
-        return None
-
-    async def async_get_data(self) -> dict:
+    async def async_get_data(self) -> IndygoPoolData:
         """Get data from the API."""
         await self.async_ensure_discovery()
+
+        if not self._pool_address or not self._relay_id:
+            raise IndygoPoolApiClientError(
+                "Pool Address or Relay ID missing after discovery"
+            )
 
         try:
             url = f"https://myindygo.com/v1/module/{self._pool_address}/status/{self._relay_id}"  # noqa: E501
@@ -321,25 +202,25 @@ class IndygoPoolApiClient:
                                 f"{response_retry.status}"
                             )
                         data = await response_retry.json()
-                        # Merge with metadata if available
-                        if self._pool_metadata:
-                            data.update(self._pool_metadata)
-                        if self._ipx_module_metadata:
-                            data["ipx_module"] = self._ipx_module_metadata
-                        return data
-
-                if response.status != HTTPStatus.OK:
+                elif response.status != HTTPStatus.OK:
                     raise IndygoPoolApiClientCommunicationError(
                         f"Error fetching data: {response.status}"
                     )
+                else:
+                    data = await response.json()
 
-                data = await response.json()
-                # Merge with metadata if available
+                # Merge with metadata if available for completeness
+                # (Parser might use it if we passed it, but we can also just inject it
+                # into the data dict or handle it in parser)
                 if self._pool_metadata:
                     data.update(self._pool_metadata)
                 if self._ipx_module_metadata:
                     data["ipx_module"] = self._ipx_module_metadata
-                return data
+
+                # Parse data
+                return self._parser.parse_data(
+                    data, self._pool_id, self._pool_address, self._relay_id
+                )
 
         except aiohttp.ClientError as exception:
             raise IndygoPoolApiClientCommunicationError(
