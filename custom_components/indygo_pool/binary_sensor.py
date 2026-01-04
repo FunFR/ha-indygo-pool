@@ -30,8 +30,6 @@ async def async_setup_entry(
     # Iterate over modules and add binary sensors based on flags
     if "modules" in coordinator.data:
         for module in coordinator.data["modules"]:
-            module_name = module.get("name", "Unknown Module")
-
             # General Module Sensors
             for key, name, device_class in [
                 ("isOnline", "Online", BinarySensorDeviceClass.CONNECTIVITY),
@@ -61,7 +59,7 @@ async def async_setup_entry(
                                 module=module,
                                 key="shutterEntry",
                                 name="Shutter",
-                                device_class=BinarySensorDeviceClass.WINDOW,  # Open/Close
+                                device_class=BinarySensorDeviceClass.WINDOW,
                                 sub_path="ipxData.deviceState",
                             )
                         )
@@ -74,9 +72,7 @@ async def async_setup_entry(
                                 module=module,
                                 key="flowEntry",
                                 name="Flow",
-                                device_class=BinarySensorDeviceClass.PROBLEM,  # Problem if no flow? Or Moving?
-                                # Usually flowEntry=False means NO flow? Need to verify logic.
-                                # User dump: flowEntry: false.
+                                device_class=BinarySensorDeviceClass.PROBLEM,
                                 sub_path="ipxData.deviceState",
                             )
                         )

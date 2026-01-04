@@ -35,7 +35,7 @@ from .coordinator import IndygoPoolDataUpdateCoordinator
 from .entity import IndygoPoolEntity
 
 
-async def async_setup_entry(
+async def async_setup_entry(  # noqa: PLR0912
     hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
@@ -130,7 +130,7 @@ async def async_setup_entry(
                             coordinator=coordinator,
                             key="totalElectrolyseDuration",
                             name=f"{module_name} Electrolyse Duration",
-                            device_class=None,  # Duration device class requires timedelta? Or just generic hours.
+                            device_class=None,
                             unit="h",
                             entity_category=EntityCategory.DIAGNOSTIC,
                             module_id=module.get("id"),
@@ -140,7 +140,6 @@ async def async_setup_entry(
 
     # Sensors from ipx_module (Scraped from Discovery)
     if "ipx_module" in data:
-        ipx_mod = data["ipx_module"]
         # Salt Value (outputs[1].ipxData.saltValue) - Usually Station 2
         entities.append(
             IndygoPoolSensor(
@@ -230,7 +229,7 @@ class IndygoPoolSensor(IndygoPoolEntity, SensorEntity):
             self._attr_entity_category = entity_category
 
     @property
-    def native_value(self) -> float | None:
+    def native_value(self) -> float | None:  # noqa: PLR0912
         """Return the native value of the sensor."""
         val = None
 
@@ -252,24 +251,15 @@ class IndygoPoolSensor(IndygoPoolEntity, SensorEntity):
                         isinstance(target, dict) and self._key in target
                     ):  # If path led to dict containing key
                         val = target[self._key]
-                    elif not isinstance(
-                        target, dict
-                    ):  # If path led to value directly (unlikely with current usage but safe)
+                    elif not isinstance(target, dict):
+                        # If path led to value directly
                         val = target
-                    # Fallback specific logic for ipxData usage above:
-                    # usage was key="totalElectrolyseDuration", json_path="ipxData.totalElectrolyseDuration"
-                    # My traversal logic above: target becomes the value of totalElectrolyseDuration.
-                    # But then I check `if self._key in target`. target is a float/int.
-                    # Let's adjust traversal logic to handle "leaf is the value" or "leaf is parent".
 
                     # Simpler Logic:
                     # 1. Start at module
                     # 2. If json_path, follow it.
                     # 3. If result is the value, done.
                     # 4. If result is dict, look for key?
-
-                    # Re-evaluating instantiation: json_path="ipxData.totalElectrolyseDuration"
-                    # So traversal should land on the value.
 
                     t = module
                     if self._json_path:

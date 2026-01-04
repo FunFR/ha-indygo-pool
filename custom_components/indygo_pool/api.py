@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from http import HTTPStatus
 
 import aiohttp
 
@@ -45,7 +46,11 @@ class IndygoPoolApiClient:
     async def async_login(self) -> None:
         """Login to the API."""
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            )
         }
         try:
             # Login payload
@@ -61,17 +66,19 @@ class IndygoPoolApiClient:
                 headers=headers,
                 allow_redirects=False,  # We expect a 302 redirect
             ) as response:
-                if response.status not in (200, 302):
+                if response.status not in (HTTPStatus.OK, HTTPStatus.FOUND):
                     raise IndygoPoolApiClientAuthenticationError(
-                        f"Login failed: status code {response.status}, text: {await response.text()}"
+                        f"Login failed: status code {response.status}, "
+                        f"text: {await response.text()}"
                     )
 
                 # Check if we got the session cookie
 
-                if response.status == 302:
+                if response.status == HTTPStatus.FOUND:
                     LOGGER.debug("Login successful (redirected)")
                 else:
-                    # If 200, we might be on the login page (failed auth) or dashboard (already auth?)
+                    # If 200, we might be on the login page (failed auth)
+                    # or dashboard (already auth?)
                     LOGGER.warning(
                         "Login returned 200, expected 302. Content start: %s",
                         (await response.text())[:200],
@@ -83,13 +90,17 @@ class IndygoPoolApiClient:
                 f"Error logging in: {exception}"
             ) from exception
 
-    async def async_ensure_discovery(self) -> None:
+    async def async_ensure_discovery(self) -> None:  # noqa: PLR0912, PLR0915
         """Ensure we have the internal pool IDs (address and relayId)."""
         if self._pool_address and self._relay_id:
             return
 
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            )
         }
 
         try:
@@ -101,7 +112,7 @@ class IndygoPoolApiClient:
                     "Discovery URL: %s, Status: %s", response.url, response.status
                 )
 
-                if response.status != 200 or "login" in str(response.url):
+                if response.status != HTTPStatus.OK or "login" in str(response.url):
                     # Maybe session expired? Try login again once
                     LOGGER.debug(
                         "Discovery failed or redirected to login, retrying auth..."
@@ -111,7 +122,7 @@ class IndygoPoolApiClient:
                         url, headers=headers
                     ) as response_retry:
                         LOGGER.debug("Retry Discovery URL: %s", response_retry.url)
-                        if response_retry.status != 200:
+                        if response_retry.status != HTTPStatus.OK:
                             raise IndygoPoolApiClientCommunicationError(
                                 f"Failed to fetch devices page: {response_retry.status}"
                             )
@@ -164,16 +175,21 @@ class IndygoPoolApiClient:
                     # Logic: Prioritize lr-pc (gateway + realy ID)
                     lr_pc = next((m for m in modules if m.get("type") == "lr-pc"), None)
                     if lr_pc:
-                        # Gateway serial is the LRMC/LRMB serial, found via relay link usually,
-                        # BUT user observed URL pattern: /module/{GATEWAY_SERIAL}/status/{RELAY_ID}
-                        # And found: Gateway LRMB10... (Serial 1000...) -> Device LRPC... (ShortID F1E81E)
+                        # Gateway serial is the LRMC/LRMB serial,
+                        # found via relay link usually,
+                        # BUT user observed URL pattern:
+                        # /module/{GATEWAY_SERIAL}/status/{RELAY_ID}
+                        # And found: Gateway LRMB10... (Serial 1000...)
+                        # -> Device LRPC... (ShortID F1E81E)
 
                         # We need to find the gateway.
-                        # In the user's trace: Gateway was 'LRMB10-0B7519' (type lr-mb-10).
-                        # Let's find a gateway-like module (lr-mb-10 or similar?) or use the owner?
+                        # In the user's trace: Gateway was 'LRMB10-0B7519'
+                        # (type lr-mb-10).
+                        # Let's find a gateway-like module (lr-mb-10 or similar?)
+                        # or use the owner?
 
                         # Actually simpler: The URL uses valid serials.
-                        # If we have an 'lr-mb-10', use its serial as the address (gateway).
+                        # If we have an 'lr-mb-10', use its serial as the address.
                         gateway = next(
                             (m for m in modules if m.get("type") == "lr-mb-10"), None
                         )
@@ -187,10 +203,8 @@ class IndygoPoolApiClient:
 
                         # Relay ID is the short ID of the lr-pc
                         # e.g. LRPC-F1E81E -> F1E81E.
-                        # It seems to be the last part of snake_case name or derived from serial?
-                        # Name: LRPC-F1E81E. Serial: 150302F1E81E0001
-                        # The ShortID 'F1E81E' is in the serial or name.
-                        # Naming convention seems: TYPE-SHORTID.
+                        # It seems to be the last part of snake_case name or derived
+                        # from serial?
                         name_parts = lr_pc.get("name", "").split("-")
                         if len(name_parts) > 1:
                             self._relay_id = name_parts[-1]
@@ -200,7 +214,8 @@ class IndygoPoolApiClient:
                             ]  # Guessing last 6 chars?
 
                         LOGGER.debug(
-                            "Selected Strategy: Gateway %s (Serial %s) -> Device %s (ShortID %s)",
+                            "Selected Strategy: Gateway %s (Serial %s) "
+                            "-> Device %s (ShortID %s)",
                             gateway.get("name"),
                             self._pool_address,
                             lr_pc.get("name"),
@@ -246,7 +261,7 @@ class IndygoPoolApiClient:
             ) from exception
 
     def _extract_json_object(self, text: str, start_index: int) -> str | None:
-        """Extract a JSON object from text starting at start_index by counting braces."""
+        """Extract a JSON object from text starting at start_index."""
         brace_count = 0
         in_string = False
         escape = False
@@ -261,15 +276,14 @@ class IndygoPoolApiClient:
                     escape = True
                 elif char == '"':
                     in_string = False
-            else:
-                if char == '"':
-                    in_string = True
-                elif char == "{":
-                    brace_count += 1
-                elif char == "}":
-                    brace_count -= 1
-                    if brace_count == 0:
-                        return text[start_index : i + 1]
+            elif char == '"':
+                in_string = True
+            elif char == "{":
+                brace_count += 1
+            elif char == "}":
+                brace_count -= 1
+                if brace_count == 0:
+                    return text[start_index : i + 1]
 
         return None
 
@@ -278,12 +292,16 @@ class IndygoPoolApiClient:
         await self.async_ensure_discovery()
 
         try:
-            url = f"https://myindygo.com/v1/module/{self._pool_address}/status/{self._relay_id}"
+            url = f"https://myindygo.com/v1/module/{self._pool_address}/status/{self._relay_id}"  # noqa: E501
             headers = {
                 "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
                 "Referer": f"https://myindygo.com/pools/{self._pool_id}/devices",
                 "Origin": "https://myindygo.com",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/120.0.0.0 Safari/537.36"
+                ),
                 "x-requested-with": "XMLHttpRequest",
                 "accept": "version=2.1",
             }
@@ -291,15 +309,16 @@ class IndygoPoolApiClient:
             LOGGER.debug("Fetching data from %s", url)
 
             async with self._session.get(url, headers=headers) as response:
-                if response.status == 401 or response.status == 403:
+                if response.status in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN):
                     # Session expired, re-login
                     await self.async_login()
                     async with self._session.get(
                         url, headers=headers
                     ) as response_retry:
-                        if response_retry.status != 200:
+                        if response_retry.status != HTTPStatus.OK:
                             raise IndygoPoolApiClientCommunicationError(
-                                f"Error fetching data after re-login: {response_retry.status}"
+                                "Error fetching data after re-login: "
+                                f"{response_retry.status}"
                             )
                         data = await response_retry.json()
                         # Merge with metadata if available
@@ -309,7 +328,7 @@ class IndygoPoolApiClient:
                             data["ipx_module"] = self._ipx_module_metadata
                         return data
 
-                if response.status != 200:
+                if response.status != HTTPStatus.OK:
                     raise IndygoPoolApiClientCommunicationError(
                         f"Error fetching data: {response.status}"
                     )
