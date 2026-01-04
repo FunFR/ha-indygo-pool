@@ -31,6 +31,7 @@ dev = [
 
 [dependency-groups]
 dev = [
+    "commitizen>=4.10.1",
     "python-dotenv>=1.2.1",
 ]
 
@@ -58,11 +59,6 @@ build_command = "pip install build && python -m build"
 allowed_tags = ["build", "chore", "ci", "docs", "feat", "fix", "perf", "style", "refactor", "test"]
 minor_tags = ["feat"]
 patch_tags = ["fix", "perf"]
-
-[tool.semantic_release.changelog]
-changelog_file = ""
-# No changelog file generated in the repo, only in the release body
-exclude_commit_patterns = []
 
 [tool.semantic_release.remote]
 type = "github"

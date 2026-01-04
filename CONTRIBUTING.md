@@ -9,6 +9,8 @@ This document outlines how to set up your development environment and contribute
 - [Python 3.9+](https://www.python.org/downloads/)
 - [uv](https://docs.astral.sh/uv/getting-started/installation/)
 - [Git](https://git-scm.com/)
+- [Docker](https://www.docker.com/)
+- [Docker Compose](https://docs.docker.com/compose/)
 
 ### Getting Started
 
@@ -56,20 +58,28 @@ Then run the integration tests using:
 uv run pytest -s -m integration tests
 ```
 
-### Manual Config Testing
+### Manual Config Testing (Docker)
 
-To test the integration in a local Home Assistant environment:
+To test the integration in a local Home Assistant environment using Docker:
 
-1. Create a `config` directory in the root of the project.
-2. Link the custom component:
+1. Start the Home Assistant container:
    ```bash
-   mkdir -p config/custom_components
-   ln -s $(pwd)/custom_components/indygo_pool config/custom_components/indygo_pool
+   docker compose up -d
    ```
-3. Run Home Assistant pointing to this config:
+
+2. Access Home Assistant at [http://localhost:8123](http://localhost:8123).
+
+3. To view logs:
    ```bash
-   uv run hass -c config
+   docker compose logs -f
    ```
+
+4. To stop the container:
+   ```bash
+   docker compose down
+   ```
+
+The `docker-compose.yml` file is already configured to map the `custom_components/indygo_pool` directory into the container, so any code changes you make will be reflected after a restart.
 
 ### Remote Deployment (Real HAOS)
 
