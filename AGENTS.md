@@ -1,53 +1,51 @@
-# AGENTS.md - Developer & AI Context Guide
+# AGENTS.md
 
-This document provides essential context, architectural decisions, and conventions for AI agents (and human developers) working on the `ha-indygo-pool` integration.
+This file serves as a guide for AI agents working on the `ha-indygo-pool` project. Follow these instructions to ensure consistency, quality, and maintainability.
 
-## Project Overview
-This is a **Home Assistant Custom Component** for "Indygo Pool" (MyIndygo) connected swimming pools.
-- **Domain**: `indygo_pool`
-- **Platform**: `myindygo.com`
-- **Tech Stack**: Python 3.12+, `aiohttp`, `uv` (package manager), `ruff` (linter).
+## 🧠 Philosophy & Principles
 
-## Architecture
-The project follows a **decoupled architecture** to separate data fetching from parsing and entity management.
+- **KISS (Keep It Simple, Stupid)**: Avoid over-engineering. Solutions should be simple and easy to understand.
+- **DRY (Don't Repeat Yourself)**: Reuse code where possible. Extract common logic into helper functions or classes.
+- **Modern Home Assistant Architecture**: Follow the latest [Home Assistant Developer Docs](https://developers.home-assistant.io/). Use `DataUpdateCoordinator` for polling, config flows for setup, and standard entity platforms.
+- **Test-Driven Mental Model**: Always verify changes. If you break it, you buy it.
 
-### 1. Data Layer
-*   **`models.py`**: Defines strict dataclasses (`IndygoPoolData`, `IndygoModuleData`, `IndygoSensorData`). **All** data passing through the system must use these structures, never raw dicts.
-*   **`parser.py`**: Contains **pure logic** for data extraction.
-    *   Parses HTML from the discovery page.
-    *   Parses JSON from the status API.
-    *   Decoupled from `api.py` (easier testing).
-    *   *Note*: Includes a fallback for `EntityCategory` imports to support environments with partial dependencies.
-*   **`api.py`**: Handles **only** HTTP communication.
-    *   Manages Authentication (POST to `/login`, with pre-fetch for cookies).
-    *   Handles Redirect loops (common issue with this API).
-    *   Returns `IndygoPoolData`.
+## 🛠️ Technology Stack
 
-### 2. Entity Layer
-*   **`coordinator.py`**: `DataUpdateCoordinator` managing the polling interval.
-*   **`sensor.py` / `binary_sensor.py`**:
-    *   **Config-Driven**: Entities are created dynamically by iterating over `coordinator.data.sensors` and `coordinator.data.modules`.
-    *   **Diagnostic Entities**: Status sensors (Online, Flow, Shutter) are categorized as `EntityCategory.DIAGNOSTIC`.
+- **Language**: Python 3.12+ (Type Hinting is MANDATORY)
+- **Dependency Management**: [uv](https://github.com/astral-sh/uv)
+- **Containerization**: Docker & Docker Compose
+- **Linting & Formatting**: `ruff`
+- **Testing**: `pytest`
 
-## ⚠️ Critical Conventions
+## 📂 Project Structure & Responsibilities
 
-### Entity Naming & Unique IDs
-**Rule**: Unique IDs MUST be stable and based on the **Pool ID**, not the Config Entry ID.
-*   **Format**: `[pool_id]_[module_id]_[sensor_key]` (or `[pool_id]_[sensor_key]` for root sensors).
-*   *Reason*: Allows users to migrate config entries without losing entity history.
+- **`api.py`**: Contains **ALL** core logic for interacting with the MyIndygo API. No Home Assistant code here.
+- **`coordinator.py`**: Handles data fetching and caching using `DataUpdateCoordinator`. Maps API data to a format usable by entities.
+- **`sensor.py` / `binary_sensor.py`**: Entity platform definitions. Should be thin wrappers around data from the coordinator.
+- **`config_flow.py`**: Handles integration setup and option flows.
+- **`strings.json`**: Contains ALL user-facing strings (labels, descriptions, errors). **NEVER** hardcode strings in Python files.
+- **`tests/`**: Contains `pytest` tests. Mirror the source structure.
 
-### Testing Strategy
-*   **Environment**: Integration tests (`tests/test_api.py`, `tests/test_integration_structure.py`) run against the **live API**.
-*   **Cookies**: Local testing environments requires `aiohttp.CookieJar(unsafe=True)`.
-*   **Graceful Failure**: Tests are configured to `pytest.skip` if specific authentication redirect loops occur (common in local non-docker environments), ensuring CI remains green (`Passed` or `Skipped`, never `Failed` due to env).
+## 🔄 Development Workflow
 
-### Linting & quality
-*   **Strictness**: `pre-commit` MUST pass.
-*   **Tools**: `ruff` is the primary linter/formatter.
-*   **No Magic Numbers**: Use constants in tests.
-*   **Complexity**: Keep cyclomatic complexity low (e.g., `parser.py` uses helper methods `_parse_root_sensors`, `_parse_modules` etc.).
+1.  **Understand the Goal**: Read the user request and existing code.
+2.  **Plan**: If complex, create an `implementation_plan.md`.
+3.  **Implement**: Make changes following the structure above.
+4.  **Verify**:
+    -   **MUST** run tests: `uv run pytest tests`
+    -   **MUST** lint/format: `uv run pre-commit run --all-files`
+5.  **Commit**: Use Conventional Commits (e.g., `feat: add pool light control`, `fix: handle api timeout`).
 
-## Development Workflow
-1.  **Dependency Management**: Use `uv` (`uv sync`, `uv run pytest`).
-2.  **Commit Messages**: Follow Conventional Commits.
-3.  **Build**: `pyproject.toml` is configured to use `uv build` and lock dependencies.
+## ✅ Quality Assurance Checklist
+
+Before telling the user you are done, YOU MUST:
+
+- [ ] **Run Tests**: `uv run pytest tests` -> ALL PASSING.
+- [ ] **Lint**: `uv run ruff check .` -> NO ERRORS.
+- [ ] **Format**: `uv run ruff format .` -> NO CHANGES NEEDED.
+- [ ] **Type Check**: ensure no obvious type errors (Python is dynamically typed but use hints).
+
+## 📚 References
+
+- `CONTRIBUTING.md`: Setup and contribution details.
+- `README.md`: project overview and usage.
