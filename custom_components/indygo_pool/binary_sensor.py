@@ -7,6 +7,7 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -21,61 +22,64 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the binary_sensor platform."""
-    coordinator = hass.data[DOMAIN][entry.entry_id]
-    entities = []
+    coordinator: IndygoPoolDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
+    entities: list[IndygoPoolBinarySensor] = []
 
     if not coordinator.data:
         return
 
     # Iterate over modules and add binary sensors based on flags
-    if "modules" in coordinator.data:
-        for module in coordinator.data["modules"]:
-            # General Module Sensors
-            for key, name, device_class in [
-                ("isOnline", "Online", BinarySensorDeviceClass.CONNECTIVITY),
-            ]:
-                if key in module:
+    # Using modules dict from IndygoPoolData
+    for module_id, module in coordinator.data.modules.items():
+        # General Module Sensors from raw_data
+        if "isOnline" in module.raw_data:
+            entities.append(
+                IndygoPoolBinarySensor(
+                    coordinator=coordinator,
+                    module_id=module_id,
+                    module_name=module.name,
+                    raw_data_source=module.raw_data,
+                    key="isOnline",
+                    name="Online",
+                    device_class=BinarySensorDeviceClass.CONNECTIVITY,
+                    entity_category=EntityCategory.DIAGNOSTIC,
+                )
+            )
+
+        # IPX Specific Sensors
+        if module.type == "ipx" and "ipxData" in module.raw_data:
+            ipx_data = module.raw_data["ipxData"]
+            if "deviceState" in ipx_data:
+                # Shutter / Volet
+                if "shutterEntry" in ipx_data["deviceState"]:
                     entities.append(
                         IndygoPoolBinarySensor(
                             coordinator=coordinator,
-                            module=module,
-                            key=key,
-                            name=name,
-                            device_class=device_class,
+                            module_id=module_id,
+                            module_name=module.name,
+                            raw_data_source=module.raw_data,
+                            key="shutterEntry",
+                            name="Shutter",
+                            device_class=BinarySensorDeviceClass.WINDOW,
+                            sub_path="ipxData.deviceState",
                         )
                     )
 
-            # IPX Specific Sensors
-            if module.get("type") == "ipx" and "ipxData" in module:
-                ipx_data = module["ipxData"]
-                if "deviceState" in ipx_data:
-                    device_state = ipx_data["deviceState"]
-
-                    # Shutter / Volet
-                    if "shutterEntry" in device_state:
-                        entities.append(
-                            IndygoPoolBinarySensor(
-                                coordinator=coordinator,
-                                module=module,
-                                key="shutterEntry",
-                                name="Shutter",
-                                device_class=BinarySensorDeviceClass.WINDOW,
-                                sub_path="ipxData.deviceState",
-                            )
+                # Flow / Débit
+                if "flowEntry" in ipx_data["deviceState"]:
+                    entities.append(
+                        IndygoPoolBinarySensor(
+                            coordinator=coordinator,
+                            module_id=module_id,
+                            module_name=module.name,
+                            raw_data_source=module.raw_data,
+                            key="flowEntry",
+                            name="Flow",
+                            device_class=BinarySensorDeviceClass.PROBLEM,
+                            sub_path="ipxData.deviceState",
+                            entity_category=EntityCategory.DIAGNOSTIC,
                         )
-
-                    # Flow / Débit
-                    if "flowEntry" in device_state:
-                        entities.append(
-                            IndygoPoolBinarySensor(
-                                coordinator=coordinator,
-                                module=module,
-                                key="flowEntry",
-                                name="Flow",
-                                device_class=BinarySensorDeviceClass.PROBLEM,
-                                sub_path="ipxData.deviceState",
-                            )
-                        )
+                    )
 
     async_add_entities(entities)
 
@@ -86,48 +90,62 @@ class IndygoPoolBinarySensor(IndygoPoolEntity, BinarySensorEntity):
     def __init__(
         self,
         coordinator: IndygoPoolDataUpdateCoordinator,
-        module: dict,
+        module_id: str,
+        module_name: str,
+        raw_data_source: dict,
         key: str,
         name: str,
         device_class: BinarySensorDeviceClass | None,
         sub_path: str | None = None,
+        entity_category: EntityCategory | None = None,
     ) -> None:
         """Initialize."""
         super().__init__(coordinator)
-        self._module_id = module.get("id")
+        self._module_id = module_id
         self._key = key
         self._sub_path = sub_path
 
         # Unique ID: ModuleID_Key
-        self._attr_unique_id = f"{self._module_id}_{key}"
-        self._attr_name = f"{module.get('name')} {name}"
+        # Use config entry id prefix for safety?
+        # Current logic: {module_id}_{key}
+        # Updated logic to match sensor.py: {entry_id}_{module_id}_{key}
+        pool_id = (
+            coordinator.data.pool_id
+            if coordinator.data and coordinator.data.pool_id
+            else coordinator.config_entry.entry_id
+        )
+        self._attr_unique_id = f"{pool_id}_{module_id}_{key}"
+
+        # Name: Indygo Pool {Module} {Sensor}
+        self._attr_name = f"Indygo Pool {module_name} {name}"
         self._attr_device_class = device_class
+        self._attr_entity_category = entity_category
 
     @property
     def is_on(self) -> bool | None:
         """Return true if the binary_sensor is on."""
         # Find the module again to get fresh data
-        if "modules" in self.coordinator.data:
-            for module in self.coordinator.data["modules"]:
-                if module.get("id") == self._module_id:
-                    # Check if we need to traverse a subpath (e.g. ipxData.deviceState)
-                    target = module
-                    if self._sub_path:
-                        for path_part in self._sub_path.split("."):
-                            target = target.get(path_part, {})
+        # Note: We can't hold reference to raw_data_source as it won't update
+        if self._module_id in self.coordinator.data.modules:
+            module = self.coordinator.data.modules[self._module_id]
+            target = module.raw_data
 
-                    val = target.get(self._key)
+            if self._sub_path:
+                for path_part in self._sub_path.split("."):
+                    target = target.get(path_part, {})
 
-                    # Handle boolean directly
-                    if isinstance(val, bool):
-                        return val
+            val = target.get(self._key)
 
-                    # Handle numbers (1.0 = True?)
-                    if val is not None:
-                        try:
-                            return float(val) == 1.0
-                        except (ValueError, TypeError):
-                            pass
+            # Handle boolean directly
+            if isinstance(val, bool):
+                return val
 
-                    return None
+            # Handle numbers (1.0 = True?)
+            if val is not None:
+                try:
+                    return float(val) == 1.0
+                except (ValueError, TypeError):
+                    pass
+
+            return None
         return None
