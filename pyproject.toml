@@ -56,7 +56,7 @@ version_variables = [
 branch = "main"
 upload_to_pypi = false
 upload_to_release = true
-build_command = "pip install uv build && uv lock && git add uv.lock && python -m build && cd custom_components/indygo_pool && zip -r ../../indygo_pool.zip . -x \"*.pyc\" -x \"*__pycache__*\""
+build_command = "pip install uv build && uv lock && git add uv.lock && python -m build && python scripts/zip_release.py"
 assets = ["indygo_pool.zip"]
 
 [tool.semantic_release.commit_parser_options]
