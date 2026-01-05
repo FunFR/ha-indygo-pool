@@ -56,9 +56,11 @@ version_variables = [
 ]
 branch = "main"
 upload_to_pypi = false
-upload_to_vcs_release = true
 build_command = "pip install uv build && uv lock && git add uv.lock && python -m build && python scripts/zip_release.py"
+
+[tool.semantic_release.publish]
 dist_glob_patterns = ["dist/indygo_pool.zip"]
+upload_to_vcs_release = true
 
 [tool.semantic_release.commit_parser_options]
 allowed_tags = ["build", "chore", "ci", "docs", "feat", "fix", "perf", "style", "refactor", "test"]
