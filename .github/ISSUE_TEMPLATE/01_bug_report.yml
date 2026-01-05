@@ -1,0 +1,61 @@
+name: Bug Report
+description: Create a report to help us improve
+title: "[BUG] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+  - type: input
+    id: version
+    attributes:
+      label: Integration Version
+      description: What version of the integration are you running?
+      placeholder: v1.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: ha_version
+    attributes:
+      label: Home Assistant Version
+      description: What version of Home Assistant are you running?
+      options:
+        - 2025.x
+        - 2024.x
+        - Older
+    validations:
+      required: true
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: Description
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction Steps
+      description: Steps to reproduce the behavior.
+      placeholder: |
+        1. Go to '...'
+        2. Click on '...'
+        3. Scroll down to '...'
+        4. See error
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Debug Logs
+      description: |
+        Please enable debug logging for the integration, reproduce the issue, and paste the relevant logs here.
+        To enable debug logging, add the following to your `configuration.yaml`:
+        ```yaml
+        logger:
+          default: info
+          logs:
+            custom_components.indygo_pool: debug
+        ```
+      render: yaml
