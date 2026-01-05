@@ -40,3 +40,6 @@ jobs:
         with:
           github_token: ${{ steps.app-token.outputs.token }}
           tag: ${{ steps.release.outputs.tag }}
+        env:
+          PSR_UPLOAD_TO_RELEASE: "true"
+          PSR_ASSETS: "dist/indygo_pool.zip"
