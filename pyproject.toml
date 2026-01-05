@@ -9,7 +9,7 @@ exclude = ["tests", "config", "docs"]
 
 [project]
 name = "ha-indygo-pool"
-version = "1.0.5"
+version = "1.0.6"
 description = "Home Assistant integration for Indygo Pool"
 requires-python = ">=3.9"
 authors = [
