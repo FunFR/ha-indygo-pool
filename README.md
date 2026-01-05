@@ -8,6 +8,7 @@
 [![Tests][tests-shield]][tests]
 [![Validate][validate-shield]][validate]
 [![Release][release-workflow-shield]][release-workflow]
+[![CodeQL][codeql-shield]][codeql]
 
 Indygo Pool is a custom integration for Home Assistant that allows you to monitor your MyIndygo connected pool solution.
 
@@ -68,4 +69,6 @@ If you found this integration helpful, feel free to buy me a coffee!
 [release-workflow]: https://github.com/FunFR/ha-indygo-pool/actions/workflows/release.yml
 [release-workflow-shield]: https://github.com/FunFR/ha-indygo-pool/actions/workflows/release.yml/badge.svg
 [add-integration]: https://my.home-assistant.io/redirect/config_flow_start/?domain=indygo_pool
+[codeql]: https://github.com/FunFR/ha-indygo-pool/security/code-scanning
+[codeql-shield]: https://github.com/FunFR/ha-indygo-pool/actions/workflows/codeql.yml/badge.svg
 [add-integration-badge]: https://my.home-assistant.io/badges/config_flow_start.svg
