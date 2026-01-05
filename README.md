@@ -4,7 +4,10 @@
 [![GitHub Last Commit][last-commit-shield]][repo]
 [![GitHub Issues][issues-shield]][issues]
 [![HACS][hacs-shield]][hacs]
-[![CI][ci-shield]][ci]
+
+[![Tests][tests-shield]][tests]
+[![Validate][validate-shield]][validate]
+[![Release][release-workflow-shield]][release-workflow]
 
 Indygo Pool is a custom integration for Home Assistant that allows you to monitor your MyIndygo connected pool solution.
 
@@ -58,7 +61,11 @@ If you found this integration helpful, feel free to buy me a coffee!
 [repo]: https://github.com/FunFR/ha-indygo-pool
 [issues]: https://github.com/FunFR/ha-indygo-pool/issues
 [issues-shield]: https://img.shields.io/github/issues/FunFR/ha-indygo-pool.svg
-[ci]: https://github.com/FunFR/ha-indygo-pool/actions/workflows/ci.yml
-[ci-shield]: https://github.com/FunFR/ha-indygo-pool/actions/workflows/ci.yml/badge.svg
+[tests]: https://github.com/FunFR/ha-indygo-pool/actions/workflows/test.yml
+[tests-shield]: https://github.com/FunFR/ha-indygo-pool/actions/workflows/test.yml/badge.svg
+[validate]: https://github.com/FunFR/ha-indygo-pool/actions/workflows/validate.yml
+[validate-shield]: https://github.com/FunFR/ha-indygo-pool/actions/workflows/validate.yml/badge.svg
+[release-workflow]: https://github.com/FunFR/ha-indygo-pool/actions/workflows/release.yml
+[release-workflow-shield]: https://github.com/FunFR/ha-indygo-pool/actions/workflows/release.yml/badge.svg
 [add-integration]: https://my.home-assistant.io/redirect/config_flow_start/?domain=indygo_pool
 [add-integration-badge]: https://my.home-assistant.io/badges/config_flow_start.svg
