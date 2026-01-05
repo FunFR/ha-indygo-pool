@@ -34,15 +34,3 @@ jobs:
         uses: python-semantic-release/python-semantic-release@350c48fcb3ffcdfd2e0a235206bc2ecea6b69df0 # v10
         with:
           github_token: ${{ steps.app-token.outputs.token }}
-      - name: Zip Release
-        run: |
-          cd custom_components/indygo_pool
-          zip -r ../../indygo_pool.zip . -x "__pycache__/*" -x "*.pyc"
-      - name: Upload Zip to Release
-        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
-        if: steps.release.outputs.released == 'true'
-        with:
-          files: indygo_pool.zip
-          tag_name: ${{ steps.release.outputs.tag }}
-          fail_on_unmatched_files: true
-          token: ${{ steps.app-token.outputs.token }}
