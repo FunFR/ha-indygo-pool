@@ -57,7 +57,6 @@ branch = "main"
 upload_to_pypi = false
 upload_to_release = true
 build_command = "pip install uv build && uv lock && git add uv.lock && python -m build && python scripts/zip_release.py"
-assets = ["indygo_pool.zip"]
 
 [tool.semantic_release.commit_parser_options]
 allowed_tags = ["build", "chore", "ci", "docs", "feat", "fix", "perf", "style", "refactor", "test"]
