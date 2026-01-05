@@ -32,6 +32,8 @@ Indygo Pool is a custom integration for Home Assistant that allows you to monito
 
 ## Configuration
 
+Add the integration: [![Add Integration][add-integration-badge]][add-integration]
+
 1. Go to **Settings** > **Devices & Services**.
 2. Click **Add Integration**.
 3. Search for **Indygo Pool**.
@@ -58,3 +60,5 @@ If you found this integration helpful, feel free to buy me a coffee!
 [issues-shield]: https://img.shields.io/github/issues/FunFR/ha-indygo-pool.svg
 [ci]: https://github.com/FunFR/ha-indygo-pool/actions/workflows/ci.yml
 [ci-shield]: https://github.com/FunFR/ha-indygo-pool/actions/workflows/ci.yml/badge.svg
+[add-integration]: https://my.home-assistant.io/redirect/config_flow_start/?domain=indygo_pool
+[add-integration-badge]: https://my.home-assistant.io/badges/config_flow_start.svg
