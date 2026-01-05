@@ -25,7 +25,7 @@ async def test_api_client_authentication():  # noqa: PLR0912, PLR0915
         pytest.skip("Credentials or pool_id not provided in environment (.env file)")
 
     async with aiohttp.ClientSession(
-        cookie_jar=aiohttp.CookieJar(unsafe=True)
+        cookie_jar=aiohttp.CookieJar(unsafe=False, quote_cookie=False)
     ) as session:
         client = IndygoPoolApiClient(email, password, pool_id=pool_id, session=session)
         try:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from http import HTTPStatus
 
 import aiohttp
@@ -173,7 +174,7 @@ class IndygoPoolApiClient:
             )
 
         try:
-            url = f"https://myindygo.com/v1/module/{self._pool_address}/status/{self._relay_id}"  # noqa: E501
+            url = f"https://myindygo.com/v1/module/{self._pool_address}/status/{self._relay_id}?_={int(time.time() * 1000)}"  # noqa: E501
             headers = {
                 "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
                 "Referer": f"https://myindygo.com/pools/{self._pool_id}/devices",
