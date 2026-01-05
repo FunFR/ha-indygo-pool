@@ -6,7 +6,7 @@ LOGGER: Logger = getLogger(__package__)
 
 DOMAIN = "indygo_pool"
 NAME = "Indygo Pool"
-VERSION = "0.1.0"
+VERSION = "1.0.1"
 
 CONF_EMAIL = "email"
 CONF_PASSWORD = "password"
