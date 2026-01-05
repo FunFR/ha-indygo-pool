@@ -34,7 +34,7 @@ jobs:
         with:
           github_token: ${{ steps.app-token.outputs.token }}
       - name: Publish to GitHub Release
-        uses: python-semantic-release/publish-action@v9.16.1
+        uses: python-semantic-release/publish-action@310a9983a0ae878b29f3aac778d7c77c1db27378 # v10.5.3
         if: steps.release.outputs.released == 'true'
         with:
           github_token: ${{ steps.app-token.outputs.token }}
