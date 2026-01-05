@@ -7,11 +7,25 @@ on:
   workflow_dispatch:
 
 jobs:
-  check-latest-versions:
-    name: Test against latest dependencies
+  check-compatibility:
+    name: Check Compatibility (${{ matrix.channel }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        channel: [stable, beta]
+
     steps:
       - uses: actions/checkout@v4
+
+      - name: Hassfest validation
+        uses: home-assistant/actions/hassfest@master
+
+      - name: HACS validation
+        uses: hacs/action@main
+        with:
+          category: integration
+          ignore: brands
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -24,12 +38,16 @@ jobs:
         with:
           python-version-file: "pyproject.toml"
 
-      - name: Update dependencies to latest
-        # valid for uv >= 0.3.0
+      - name: Update to latest Stable dependencies
+        if: matrix.channel == 'stable'
         run: uv lock --upgrade
+
+      - name: Update to latest Beta dependencies
+        if: matrix.channel == 'beta'
+        run: uv lock --upgrade --prerelease=allow
 
       - name: Install dependencies
         run: uv sync --all-extras
 
-      - name: Run tests with latest versions
+      - name: Run tests
         run: uv run pytest tests/ custom_components/
