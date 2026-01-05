@@ -49,7 +49,10 @@ norecursedirs = [".git", "testing_config"]
 
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
-version_variables = ["custom_components/indygo_pool/manifest.json:version"]
+version_variables = [
+    "custom_components/indygo_pool/manifest.json:version",
+    "custom_components/indygo_pool/const.py:VERSION",
+]
 branch = "main"
 upload_to_pypi = false
 upload_to_release = true
