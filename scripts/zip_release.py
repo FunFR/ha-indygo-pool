@@ -6,7 +6,10 @@ from pathlib import Path
 def create_zip():
     root_dir = Path(__file__).parent.parent
     source_dir = root_dir / "custom_components" / "indygo_pool"
-    output_zip = root_dir / "indygo_pool.zip"
+    dist_dir = root_dir / "dist"
+    output_zip = dist_dir / "indygo_pool.zip"
+
+    dist_dir.mkdir(exist_ok=True)
 
     if output_zip.exists():
         os.remove(output_zip)
