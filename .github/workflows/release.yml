@@ -9,6 +9,7 @@ on:
       - main
 
 permissions:
+  id-token: write
   contents: write
 
 jobs:
@@ -29,8 +30,15 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
           ref: ${{ github.head_ref || github.ref }}
-      - name: Python Semantic Release
+      - name: Semantic Version Release
         id: release
         uses: python-semantic-release/python-semantic-release@350c48fcb3ffcdfd2e0a235206bc2ecea6b69df0 # v10
         with:
           github_token: ${{ steps.app-token.outputs.token }}
+          verbosity: "2"
+      - name: Upload to GitHub Release Assets
+        uses: python-semantic-release/publish-action@310a9983a0ae878b29f3aac778d7c77c1db27378 # v10.5.3
+        if: steps.release.outputs.released == 'true'
+        with:
+          github_token: ${{ steps.app-token.outputs.token }}
+          verbosity: "2"
