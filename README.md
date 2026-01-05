@@ -6,13 +6,12 @@
 [![HACS][hacs-shield]][hacs]
 [![CI][ci-shield]][ci]
 
-Indygo Pool is a custom integration for Home Assistant that allows you to monitor and control your MyIndygo connected pool solution.
+Indygo Pool is a custom integration for Home Assistant that allows you to monitor your MyIndygo connected pool solution.
 
 ## Features
 
 - **Temperature Monitoring**: Keep an eye on your pool's water temperature.
 - **pH & Salt levels**: Monitor the chemical balance of your pool.
-- **Filtration Control**: View and change the filtration mode (Off, Auto, On, Forced).
 - **Electrolyser Status**: Monitor the production status.
 
 ## Installation
@@ -36,7 +35,8 @@ Indygo Pool is a custom integration for Home Assistant that allows you to monito
 1. Go to **Settings** > **Devices & Services**.
 2. Click **Add Integration**.
 3. Search for **Indygo Pool**.
-4. Enter your MyIndygo credentials (email and password).
+4. Enter your MyIndygo credentials (email, password) and your **Pool ID**.
+    > The **Pool ID** can be found in the URL after logging into myindygo.com (e.g., `https://myindygo.com/pools/<Pool ID>/devices`).
 
 ## Disclaimer
 
