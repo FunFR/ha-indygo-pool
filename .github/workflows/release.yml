@@ -45,3 +45,4 @@ jobs:
           files: indygo_pool.zip
           tag_name: ${{ steps.release.outputs.tag }}
           fail_on_unmatched_files: true
+          token: ${{ steps.app-token.outputs.token }}
