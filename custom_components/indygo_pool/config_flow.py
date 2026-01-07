@@ -28,6 +28,9 @@ class IndygoPoolFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
 
         if user_input is not None:
+            await self.async_set_unique_id(user_input[CONF_POOL_ID])
+            self._abort_if_unique_id_configured()
+
             try:
                 await self._test_credentials(
                     email=user_input[CONF_EMAIL],
