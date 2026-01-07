@@ -25,10 +25,7 @@ class IndygoPoolEntity(CoordinatorEntity[IndygoPoolDataUpdateCoordinator]):
             else:
                 self._attr_unique_id = coordinator.config_entry.entry_id
 
-            if coordinator.data.name:
-                name = f"{NAME} {coordinator.data.name}"
-            else:
-                name = f"{NAME} {self._attr_unique_id}"
+            name = f"{NAME} {self._attr_unique_id}"
         else:
             self._attr_unique_id = coordinator.config_entry.entry_id
             name = f"{NAME} {self._attr_unique_id}"
