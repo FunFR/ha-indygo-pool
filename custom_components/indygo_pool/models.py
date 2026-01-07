@@ -47,3 +47,7 @@ class IndygoPoolData:
 
     # Raw data for fallback/diagnostics
     raw_data: dict[str, Any] = field(default_factory=dict)
+
+    # Pool Status Items (from 'pool' list in JSON)
+    # Key = index (e.g. "0" for filtration), Value = IndygoSensorData
+    pool_status: dict[str, IndygoSensorData] = field(default_factory=dict)

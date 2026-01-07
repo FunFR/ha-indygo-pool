@@ -153,9 +153,33 @@ class IndygoParser:
         self._parse_root_sensors(json_data, pool_data)
         self._parse_sensor_state(json_data, pool_data)
         self._parse_modules(json_data, pool_data)
+        self._parse_modules(json_data, pool_data)
         self._parse_scraped_ipx(json_data, pool_data)
+        self._parse_pool_status_list(json_data, pool_data)
 
         return pool_data
+
+    def _parse_pool_status_list(
+        self, json_data: dict, pool_data: IndygoPoolData
+    ) -> None:
+        """Parse 'pool' list which contains status for Filtration, etc."""
+        if "pool" in json_data and isinstance(json_data["pool"], list):
+            for item in json_data["pool"]:
+                idx = item.get("index")
+                val = item.get("value")
+
+                # Index 0 is Filtration
+                if idx == 0:
+                    pool_data.pool_status["0"] = IndygoSensorData(
+                        key="filtration_status",
+                        name="Filtration Status",
+                        value=val,
+                        extra_attributes={
+                            "info": item.get("info"),
+                            "time": item.get("time"),
+                            "tempRef": item.get("tempRef"),
+                        },
+                    )
 
     def _parse_root_sensors(self, json_data: dict, pool_data: IndygoPoolData) -> None:
         """Parse root level sensors."""
