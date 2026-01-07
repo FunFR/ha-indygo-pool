@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from http import HTTPStatus
 
 import aiohttp
@@ -97,10 +96,10 @@ class IndygoPoolApiClient:
                 f"Error logging in: {exception}"
             ) from exception
 
-    async def async_ensure_discovery(self) -> None:
-        """Ensure we have the internal pool IDs (address and relayId)."""
-        if self._pool_address and self._relay_id:
-            return
+    async def async_refresh_scraped_data(self) -> None:
+        """Fetch and parse the pool devices page to get fresh scraped data."""
+        # Note: We run this every update because some data (IPX sensors) is only
+        # available on the devices page HTML/JS, not in the status JSON API.
 
         headers = {
             "User-Agent": (
@@ -115,18 +114,18 @@ class IndygoPoolApiClient:
             url = f"https://myindygo.com/pools/{self._pool_id}/devices"
             async with self._session.get(url, headers=headers) as response:
                 LOGGER.debug(
-                    "Discovery URL: %s, Status: %s", response.url, response.status
+                    "Scraping URL: %s, Status: %s", response.url, response.status
                 )
 
                 if response.status != HTTPStatus.OK or "login" in str(response.url):
                     LOGGER.debug(
-                        "Discovery failed or redirected to login, retrying auth..."
+                        "Scraping failed or redirected to login, retrying auth..."
                     )
                     await self.async_login()
                     async with self._session.get(
                         url, headers=headers
                     ) as response_retry:
-                        LOGGER.debug("Retry Discovery URL: %s", response_retry.url)
+                        LOGGER.debug("Retry Scraping URL: %s", response_retry.url)
                         if response_retry.status != HTTPStatus.OK:
                             raise IndygoPoolApiClientCommunicationError(
                                 f"Failed to fetch devices page: {response_retry.status}"
@@ -154,19 +153,19 @@ class IndygoPoolApiClient:
             self._pool_metadata = pool_metadata
 
             LOGGER.debug(
-                "Discovered pool keys: gateway_serial=%s, device_short_id=%s",
+                "Refreshed scraped data: gateway_serial=%s, device_short_id=%s",
                 self._pool_address,
                 self._relay_id,
             )
 
         except aiohttp.ClientError as exception:
             raise IndygoPoolApiClientCommunicationError(
-                f"Error during discovery: {exception}"
+                f"Error during scraping: {exception}"
             ) from exception
 
     async def async_get_data(self) -> IndygoPoolData:
         """Get data from the API."""
-        await self.async_ensure_discovery()
+        await self.async_refresh_scraped_data()
 
         if not self._pool_address or not self._relay_id:
             raise IndygoPoolApiClientError(
@@ -174,7 +173,7 @@ class IndygoPoolApiClient:
             )
 
         try:
-            url = f"https://myindygo.com/v1/module/{self._pool_address}/status/{self._relay_id}?_={int(time.time() * 1000)}"  # noqa: E501
+            url = f"https://myindygo.com/v1/module/{self._pool_address}/status/{self._relay_id}"
             headers = {
                 "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
                 "Referer": f"https://myindygo.com/pools/{self._pool_id}/devices",
@@ -209,6 +208,7 @@ class IndygoPoolApiClient:
                     )
                 else:
                     data = await response.json()
+                    LOGGER.debug("API Data received: %s", data)
 
                 # Merge with metadata if available for completeness
                 # (Parser might use it if we passed it, but we can also just inject it

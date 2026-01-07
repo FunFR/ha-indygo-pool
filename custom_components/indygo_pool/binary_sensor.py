@@ -81,6 +81,22 @@ async def async_setup_entry(
                         )
                     )
 
+    # Pool Status Sensors (Filtration, etc)
+    for index, sensor_data in coordinator.data.pool_status.items():
+        if index == "0":
+            entities.append(
+                IndygoPoolBinarySensor(
+                    coordinator=coordinator,
+                    module_id="pool_status",
+                    module_name="Pool",
+                    raw_data_source={},  # Not used for pool_status strategy
+                    key=index,
+                    name=sensor_data.name or "Filtration",
+                    device_class=BinarySensorDeviceClass.RUNNING,
+                    is_pool_status=True,
+                )
+            )
+
     async_add_entities(entities)
 
 
@@ -98,12 +114,14 @@ class IndygoPoolBinarySensor(IndygoPoolEntity, BinarySensorEntity):
         device_class: BinarySensorDeviceClass | None,
         sub_path: str | None = None,
         entity_category: EntityCategory | None = None,
+        is_pool_status: bool = False,
     ) -> None:
         """Initialize."""
         super().__init__(coordinator)
         self._module_id = module_id
         self._key = key
         self._sub_path = sub_path
+        self._is_pool_status = is_pool_status
 
         # Unique ID: ModuleID_Key
         # Use config entry id prefix for safety?
@@ -124,6 +142,18 @@ class IndygoPoolBinarySensor(IndygoPoolEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool | None:
         """Return true if the binary_sensor is on."""
+        # Special handling for pool_status items
+        if self._is_pool_status:
+            if self._key in self.coordinator.data.pool_status:
+                data = self.coordinator.data.pool_status[self._key]
+                val = data.value
+                if val is not None:
+                    try:
+                        return float(val) == 1.0
+                    except (ValueError, TypeError):
+                        pass
+            return None
+
         # Find the module again to get fresh data
         # Note: We can't hold reference to raw_data_source as it won't update
         if self._module_id in self.coordinator.data.modules:
