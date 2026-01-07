@@ -134,8 +134,8 @@ class IndygoPoolBinarySensor(IndygoPoolEntity, BinarySensorEntity):
         )
         self._attr_unique_id = f"{pool_id}_{module_id}_{key}"
 
-        # Name: Indygo Pool {Module} {Sensor}
-        self._attr_name = f"Indygo Pool {module_name} {name}"
+        # Name: {Module} {Sensor} (Device name prepended automatically)
+        self._attr_name = f"{module_name} {name}"
         self._attr_device_class = device_class
         self._attr_entity_category = entity_category
 

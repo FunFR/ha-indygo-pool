@@ -146,8 +146,15 @@ class IndygoParser:
         self, json_data: dict, pool_id: str, pool_address: str, relay_id: str
     ) -> IndygoPoolData:
         """Parse the API response into a structured IndygoPoolData object."""
+        # Extract Name from pool_metadata
+        pool_name = json_data.get("name") if json_data else None
+
         pool_data = IndygoPoolData(
-            pool_id=pool_id, address=pool_address, relay_id=relay_id, raw_data=json_data
+            pool_id=pool_id,
+            name=pool_name,
+            address=pool_address,
+            relay_id=relay_id,
+            raw_data=json_data,
         )
 
         self._parse_root_sensors(json_data, pool_data)

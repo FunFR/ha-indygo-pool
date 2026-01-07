@@ -13,17 +13,26 @@ class IndygoPoolEntity(CoordinatorEntity[IndygoPoolDataUpdateCoordinator]):
     """IndygoPoolEntity class."""
 
     _attr_attribution = "Data provided by MyIndygo"
+    _attr_has_entity_name = True
 
     def __init__(self, coordinator: IndygoPoolDataUpdateCoordinator) -> None:
         """Initialize."""
         super().__init__(coordinator)
-        if coordinator.data and coordinator.data.pool_id:
-            self._attr_unique_id = coordinator.data.pool_id
+        name = NAME
+        if coordinator.data:
+            if coordinator.data.pool_id:
+                self._attr_unique_id = coordinator.data.pool_id
+            else:
+                self._attr_unique_id = coordinator.config_entry.entry_id
+
+            if coordinator.data.name:
+                name = coordinator.data.name
         else:
             self._attr_unique_id = coordinator.config_entry.entry_id
+
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._attr_unique_id)},
-            name=NAME,
+            name=name,
             model=VERSION,
             manufacturer=NAME,
         )

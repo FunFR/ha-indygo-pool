@@ -110,12 +110,11 @@ class IndygoPoolSensor(IndygoPoolEntity, SensorEntity):
 
         if module_id:
             self._attr_unique_id = f"{pool_id}_{module_id}_{self._sensor_key}"
-            # Name: Indygo Pool {Module} {Sensor}
-            # Note: IndygoPoolEntity sets Device Info name to "Indygo Pool"
-            self._attr_name = f"Indygo Pool {module_name} {description.name}"
+            # Name: {Module} {Sensor} (Device name prepended automatically)
+            self._attr_name = f"{module_name} {description.name}"
         else:
             self._attr_unique_id = f"{pool_id}_{self._sensor_key}"
-            self._attr_name = f"Indygo Pool {description.name}"
+            self._attr_name = f"{description.name}"
 
     @property
     def native_value(self) -> float | str | None:

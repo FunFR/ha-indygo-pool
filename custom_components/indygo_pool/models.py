@@ -36,6 +36,7 @@ class IndygoPoolData:
     """Class representing the aggregated pool data."""
 
     pool_id: str
+    name: str | None = None
     address: str | None = None
     relay_id: str | None = None
 
