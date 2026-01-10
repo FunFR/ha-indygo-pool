@@ -187,17 +187,30 @@ class IndygoParser:
     def _parse_root_sensors(self, json_data: dict, pool_data: IndygoPoolData) -> None:
         """Parse root level sensors."""
         root_sensors_map = {
-            "temperature": ("Water Temperature", "temperature", "°C"),
+            "temperature": {
+                "name": "Water Temperature",
+                "device_class": "temperature",
+                "unit": "°C",
+                "attributes": {"temperatureTime": "last_measurement_time"},
+            },
         }
 
-        for key, (name, device_class, unit) in root_sensors_map.items():
+        for key, config in root_sensors_map.items():
             if key in json_data and json_data[key] is not None:
+                extra_attributes = {}
+                # Handle attributes mapping
+                attr_map = config.get("attributes", {})
+                for source_key, target_key in attr_map.items():
+                    if source_key in json_data:
+                        extra_attributes[target_key] = json_data[source_key]
+
                 pool_data.sensors[key] = IndygoSensorData(
                     key=key,
-                    name=name,
+                    name=config["name"],
                     value=json_data[key],
-                    unit=unit,
-                    device_class=device_class,
+                    unit=config.get("unit"),
+                    device_class=config.get("device_class"),
+                    extra_attributes=extra_attributes,
                 )
 
     def _parse_sensor_state(self, json_data: dict, pool_data: IndygoPoolData) -> None:
