@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from homeassistant.components.sensor import (
     SensorEntity,
@@ -57,8 +58,6 @@ async def async_setup_entry(
     # 2. Module Sensors
     for module_id, module in coordinator.data.modules.items():
         for key, sensor_data in module.sensors.items():
-            # Naming: Indygo Pool {Module Name} {Sensor Name}
-            # We use the module name in the Entity (init), here we just pass data
             description = IndygoSensorEntityDescription(
                 key=key,
                 name=sensor_data.name,
@@ -99,9 +98,6 @@ class IndygoPoolSensor(IndygoPoolEntity, SensorEntity):
         self._sensor_key = sensor_data.key
         self._module_id = module_id
 
-        # Unique ID strategy
-        # Root: {pool_id}_{key}
-        # Module: {pool_id}_{module_id}_{key}
         pool_id = (
             coordinator.data.pool_id
             if coordinator.data and coordinator.data.pool_id
@@ -110,7 +106,6 @@ class IndygoPoolSensor(IndygoPoolEntity, SensorEntity):
 
         if module_id:
             self._attr_unique_id = f"{pool_id}_{module_id}_{self._sensor_key}"
-            # Name: {Module} {Sensor} (Device name prepended automatically)
             self._attr_name = f"{module_name} {description.name}"
         else:
             self._attr_unique_id = f"{pool_id}_{self._sensor_key}"
@@ -136,3 +131,20 @@ class IndygoPoolSensor(IndygoPoolEntity, SensorEntity):
             val = data.sensors[self._sensor_key].value
 
         return val
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return the state attributes."""
+        data = self.coordinator.data
+        if not data:
+            return None
+
+        if self._module_id:
+            if self._module_id in data.modules:
+                module = data.modules[self._module_id]
+                if self._sensor_key in module.sensors:
+                    return module.sensors[self._sensor_key].extra_attributes
+        elif self._sensor_key in data.sensors:
+            return data.sensors[self._sensor_key].extra_attributes
+
+        return None

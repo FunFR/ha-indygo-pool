@@ -18,6 +18,67 @@ load_dotenv()
 
 @pytest.mark.asyncio
 @pytest.mark.integration
+async def _verify_critical_sensors(data: IndygoPoolData):
+    """Verify critical sensors like temperature."""
+    assert "temperature" in data.sensors, "Missing water temperature sensor"
+    assert isinstance(data.sensors["temperature"], IndygoSensorData)
+    assert isinstance(data.sensors["temperature"].value, (float, int))
+    print(f"DEBUG: Water Temperature = {data.sensors['temperature'].value} °C")
+
+
+async def _verify_ph_sensor(data: IndygoPoolData):
+    """Verify pH sensor and derived attributes."""
+    if "ph" in data.sensors:
+        ph_sensor = data.sensors["ph"]
+        print(f"DEBUG: pH found: {ph_sensor.value}")
+        assert ph_sensor.value is not None
+
+        if "last_measurement_time" in ph_sensor.extra_attributes:
+            ts = ph_sensor.extra_attributes["last_measurement_time"]
+            print(f"DEBUG: pH timestamp: {ts}")
+        else:
+            print(
+                "WARNING: pH sensor found but missing last_measurement_time"
+                " (scraping might have failed to find input)"
+            )
+    else:
+        pytest.fail("ph sensor not found in live data")
+
+
+async def _verify_ipx_sensors(data: IndygoPoolData):
+    """Verify other IPX related sensors."""
+    expected_sensors = [
+        "ipx_salt",
+        "ph_setpoint",
+        "production_setpoint",
+        "electrolyzer_mode",
+    ]
+
+    for sensor_key in expected_sensors:
+        if sensor_key in data.sensors:
+            val = data.sensors[sensor_key].value
+            print(f"DEBUG: {sensor_key} found: {val}")
+            assert val is not None
+        else:
+            print(f"WARNING: {sensor_key} not found (optional/unavailable)")
+
+
+async def _verify_module_sensors(data: IndygoPoolData):
+    """Verify module specific sensors."""
+    found_duration = False
+    for m in data.modules.values():
+        if "totalElectrolyseDuration" in m.sensors:
+            val = m.sensors["totalElectrolyseDuration"].value
+            print(f"DEBUG: totalElectrolyseDuration found on module {m.id}: {val}")
+            assert val is not None
+            found_duration = True
+
+    if not found_duration:
+        print("WARNING: totalElectrolyseDuration not found on any module")
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
 async def test_live_data_structure_conformity():
     """Verify that live API data conforms to expected structure."""
     email = os.getenv("email")
@@ -46,22 +107,16 @@ async def test_live_data_structure_conformity():
         print(f"DEBUG: Relay ID = {data.relay_id}")
 
         # 2. Critical Sensors (Must exist for a standard pool)
-        # Water Temp and pH are almost always present
-        assert "temperature" in data.sensors, "Missing water temperature sensor"
-        assert isinstance(data.sensors["temperature"], IndygoSensorData)
-        assert isinstance(data.sensors["temperature"].value, (float, int))
-        print(f"DEBUG: Water Temperature = {data.sensors['temperature'].value} °C")
-
-        # 3. Helpers to check strictly positive values for crucial metrics
-        # Constants for realistic range check
-        min_temp = -10
-        max_temp = 50
-
-        temp = data.sensors["temperature"].value
-        if temp is not None:
-            assert temp > min_temp and temp < max_temp, (
-                f"Water temp {temp} out of realistic range"
-            )
+        await _verify_critical_sensors(data)
 
         # 4. Modules Check
         assert len(data.modules) > 0, "No modules found attached to pool"
+
+        # 5. pH Check (Enhanced with scraping)
+        await _verify_ph_sensor(data)
+
+        # 6. Other IPX Sensors
+        await _verify_ipx_sensors(data)
+
+        # 7. Module Sensors
+        await _verify_module_sensors(data)

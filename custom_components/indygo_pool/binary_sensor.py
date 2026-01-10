@@ -125,8 +125,6 @@ class IndygoPoolBinarySensor(IndygoPoolEntity, BinarySensorEntity):
 
         # Unique ID: ModuleID_Key
         # Use config entry id prefix for safety?
-        # Current logic: {module_id}_{key}
-        # Updated logic to match sensor.py: {entry_id}_{module_id}_{key}
         pool_id = (
             coordinator.data.pool_id
             if coordinator.data and coordinator.data.pool_id
