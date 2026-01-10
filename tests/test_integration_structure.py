@@ -25,6 +25,13 @@ async def _verify_critical_sensors(data: IndygoPoolData):
     assert isinstance(data.sensors["temperature"].value, (float, int))
     print(f"DEBUG: Water Temperature = {data.sensors['temperature'].value} °C")
 
+    # Check for last_measurement_time attribute
+    if "last_measurement_time" in data.sensors["temperature"].extra_attributes:
+        val = data.sensors["temperature"].extra_attributes["last_measurement_time"]
+        print(f"DEBUG: Temperature timestamp: {val}")
+    else:
+        print("WARNING: Temperature sensor missing last_measurement_time")
+
 
 async def _verify_ph_sensor(data: IndygoPoolData):
     """Verify pH sensor and derived attributes."""

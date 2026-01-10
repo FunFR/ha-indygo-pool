@@ -39,6 +39,8 @@ class TestIndygoParser:
             "<script>\n"
             "    var currentPool = {\n"
             '        "id": 123,\n'
+            '        "temperature": 25.5,\n'
+            '        "temperatureTime": "2023-01-01T12:00:00Z",\n'
             '        "modules": [\n'
             '            {"type": "lr-mb-10", "serialNumber": "GATEWAY123", '
             '"name": "Gateway-01"},\n'
@@ -52,12 +54,15 @@ class TestIndygoParser:
         assert pool_address == TEST_GATEWAY_SERIAL
         assert relay_id == TEST_RELAY_ID
         assert metadata["id"] == int(TEST_POOL_ID)
+        assert metadata["temperature"] == TEST_TEMP_VALUE
+        assert metadata["temperatureTime"] == TEST_DATE
 
     def test_parse_data(self):
         """Test parsing API JSON into IndygoPoolData."""
         parser = IndygoParser()
         json_data = {
             "temperature": TEST_TEMP_VALUE,
+            "temperatureTime": TEST_DATE,
             "ph": TEST_PH_VALUE,
             "modules": [
                 {
@@ -96,6 +101,10 @@ class TestIndygoParser:
         assert isinstance(pool_data, IndygoPoolData)
         assert pool_data.pool_id == "POOL1"
         assert pool_data.sensors["temperature"].value == TEST_TEMP_VALUE
+        assert (
+            pool_data.sensors["temperature"].extra_attributes["last_measurement_time"]
+            == TEST_DATE
+        )
 
         # Test Module Data
         assert "MOD1" in pool_data.modules
