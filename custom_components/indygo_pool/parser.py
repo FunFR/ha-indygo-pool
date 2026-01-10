@@ -23,6 +23,9 @@ from .models import IndygoModuleData, IndygoPoolData, IndygoSensorData
 _LOGGER = logging.getLogger(__name__)
 
 
+IPX_PH_SENSOR_TYPE = 6
+
+
 class IndygoParser:
     """Parser for Indygo Pool data."""
 
@@ -183,14 +186,8 @@ class IndygoParser:
 
     def _parse_root_sensors(self, json_data: dict, pool_data: IndygoPoolData) -> None:
         """Parse root level sensors."""
-        # Map simple keys directly
         root_sensors_map = {
             "temperature": ("Water Temperature", "temperature", "°C"),
-            "ph": ("pH", "ph", None),
-            "redox": ("Redox", None, "mV"),
-            "orp": ("ORP", None, "mV"),
-            "salt": ("Salt", None, "g/L"),
-            "chlorineRate": ("Chlorine", None, "ppm"),
         }
 
         for key, (name, device_class, unit) in root_sensors_map.items():
@@ -210,16 +207,6 @@ class IndygoParser:
                 idx = sensor_item.get("index")
                 val = sensor_item.get("value")
                 if idx == 0 and val is not None:
-                    # Water Temp override or backup - DUPLICATE
-                    # User requested removal of duplicate. Logic commented out.
-                    # pool_data.sensors["water_temp_sensor_state"] = IndygoSensorData(
-                    #     key="water_temp_sensor_state",
-                    #     name="Water Temperature (Sensor State)",
-                    #     value=val / 100.0,
-                    #     unit="°C",
-                    #     device_class="temperature",
-                    #     entity_category="diagnostic",
-                    # )
                     pass
 
     def _parse_modules(self, json_data: dict, pool_data: IndygoPoolData) -> None:
@@ -304,3 +291,30 @@ class IndygoParser:
                     unit=None,
                     entity_category=EntityCategory.DIAGNOSTIC,
                 )
+
+            # pH Latest (from inputs)
+            inputs = ipx_mod.get("inputs", [])
+            if isinstance(inputs, list):
+                for inp in inputs:
+                    last_val = inp.get("lastValue")
+                    if (
+                        last_val
+                        and "value" in last_val
+                        and last_val["value"] is not None
+                    ):
+                        if inp.get("type") == IPX_PH_SENSOR_TYPE:
+                            val = last_val["value"]
+                        date_str = last_val.get("date")
+
+                        extra_attrs = {}
+                        if date_str:
+                            extra_attrs["last_measurement_time"] = date_str
+
+                        pool_data.sensors["ph"] = IndygoSensorData(
+                            key="ph",
+                            name="pH",
+                            value=val,
+                            unit=None,  # pH has no unit
+                            extra_attributes=extra_attrs,
+                        )
+                        break

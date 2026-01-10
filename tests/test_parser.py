@@ -13,6 +13,7 @@ TEST_ELECTROLYSE_DURATION = 100
 TEST_PH_SETPOINT = 7.4
 TEST_SALT_VALUE = 3.0
 TEST_PROD_SETPOINT = 80
+TEST_DATE = "2023-01-01T12:00:00Z"
 
 
 class TestIndygoParser:
@@ -75,7 +76,18 @@ class TestIndygoParser:
                             "percentageSetpoint": TEST_PROD_SETPOINT,
                         }
                     },
-                ]
+                ],
+                "inputs": [
+                    {"name": "", "type": 0},
+                    {
+                        "name": "",
+                        "type": 6,
+                        "lastValue": {
+                            "value": TEST_PH_VALUE,
+                            "date": TEST_DATE,
+                        },
+                    },
+                ],
             },
         }
 
@@ -84,7 +96,6 @@ class TestIndygoParser:
         assert isinstance(pool_data, IndygoPoolData)
         assert pool_data.pool_id == "POOL1"
         assert pool_data.sensors["temperature"].value == TEST_TEMP_VALUE
-        assert pool_data.sensors["ph"].value == TEST_PH_VALUE
 
         # Test Module Data
         assert "MOD1" in pool_data.modules
@@ -96,3 +107,11 @@ class TestIndygoParser:
         # Test IPX Scraped Data
         assert pool_data.sensors["ph_setpoint"].value == TEST_PH_SETPOINT
         assert pool_data.sensors["ipx_salt"].value == TEST_SALT_VALUE
+
+        # Test pH Latest Logic (merged)
+        assert "ph" in pool_data.sensors
+        assert pool_data.sensors["ph"].value == TEST_PH_VALUE
+        assert (
+            pool_data.sensors["ph"].extra_attributes["last_measurement_time"]
+            == TEST_DATE
+        )
