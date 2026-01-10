@@ -26,6 +26,14 @@ class IndygoPoolApiClientCommunicationError(IndygoPoolApiClientError):
 class IndygoPoolApiClient:
     """Indygo Pool API Client."""
 
+    DEFAULT_HEADERS = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        )
+    }
+
     def __init__(
         self,
         email: str,
@@ -45,15 +53,89 @@ class IndygoPoolApiClient:
         self._pool_metadata: dict | None = None
         self._ipx_module_metadata: dict | None = None
 
+    async def _request(
+        self,
+        method: str,
+        url: str,
+        headers: dict | None = None,
+        data: dict | None = None,
+        return_json: bool = False,
+        allow_redirects: bool = True,
+        retry_auth: bool = False,
+    ) -> aiohttp.ClientResponse | dict | str:
+        """Perform an HTTP request."""
+        request_headers = self.DEFAULT_HEADERS.copy()
+        if headers:
+            request_headers.update(headers)
+
+        try:
+            async with self._session.request(
+                method,
+                url,
+                headers=request_headers,
+                data=data,
+                allow_redirects=allow_redirects,
+            ) as response:
+                if (
+                    response.status in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN)
+                    or (
+                        # Sometimes scraping redirects to login on session expiry
+                        not allow_redirects
+                        and response.status == HTTPStatus.FOUND
+                        and "login" in response.headers.get("Location", "")
+                    )
+                    or (
+                        # Specific check for scraping where redirect
+                        # might be followed transparently
+                        "login" in str(response.url)
+                    )
+                ) and retry_auth:
+                    LOGGER.debug(
+                        "Session expired or redirected to login, re-authenticating..."
+                    )
+                    await self.async_login()
+                    # Retry carefully to avoid infinite recursion
+                    return await self._request(
+                        method,
+                        url,
+                        headers=headers,
+                        data=data,
+                        return_json=return_json,
+                        allow_redirects=allow_redirects,
+                        retry_auth=False,
+                    )
+
+                if response.status != HTTPStatus.OK and not (
+                    # Allow 302 for login flow if caller handles it
+                    not allow_redirects and response.status == HTTPStatus.FOUND
+                ):
+                    # We might want to read the body for error details
+                    try:
+                        text = await response.text()
+                    except Exception:
+                        text = "<could not read response>"
+                    LOGGER.error(
+                        "API Request %s %s failed: %s - %s",
+                        method,
+                        url,
+                        response.status,
+                        text,
+                    )
+                    raise IndygoPoolApiClientCommunicationError(
+                        f"Request failed: {response.status}"
+                    )
+
+                if return_json:
+                    return await response.json()
+                return await response.text()
+
+        except aiohttp.ClientError as exception:
+            raise IndygoPoolApiClientCommunicationError(
+                f"Error communicating with API: {exception}"
+            ) from exception
+
     async def async_login(self) -> None:
         """Login to the API."""
-        headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0.0.0 Safari/537.36"
-            )
-        }
         try:
             # Login payload
             data = {
@@ -62,19 +144,14 @@ class IndygoPoolApiClient:
             }
 
             # Perform login
-            # First, fetch the login page to establish session/cookies
-            async with self._session.get(
-                "https://myindygo.com/login", headers=headers
-            ) as response_get:
-                if response_get.status != HTTPStatus.OK:
-                    LOGGER.warning("Initial GET /login failed: %s", response_get.status)
+            await self._request("GET", "https://myindygo.com/login", retry_auth=False)
 
             # Then POST credentials
             async with self._session.post(
                 "https://myindygo.com/login",
                 data=data,
-                headers=headers,
-                allow_redirects=False,  # We expect a 302 redirect
+                headers=self.DEFAULT_HEADERS,
+                allow_redirects=False,
             ) as response:
                 if response.status not in (HTTPStatus.OK, HTTPStatus.FOUND):
                     raise IndygoPoolApiClientAuthenticationError(
@@ -101,67 +178,36 @@ class IndygoPoolApiClient:
         # Note: We run this every update because some data (IPX sensors) is only
         # available on the devices page HTML/JS, not in the status JSON API.
 
-        headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0.0.0 Safari/537.36"
-            )
-        }
+        url = f"https://myindygo.com/pools/{self._pool_id}/devices"
+        text = await self._request("GET", url, retry_auth=True)
+        # Type check helper since _request returns Union
+        if not isinstance(text, str):
+            # Should not happen if return_json=False
+            text = str(text)
 
-        try:
-            # Fetch the devices page
-            url = f"https://myindygo.com/pools/{self._pool_id}/devices"
-            async with self._session.get(url, headers=headers) as response:
-                LOGGER.debug(
-                    "Scraping URL: %s, Status: %s", response.url, response.status
-                )
+        # Parse HTML
+        pool_address, relay_id, pool_metadata = self._parser.parse_pool_ids(
+            text, self._pool_id
+        )
 
-                if response.status != HTTPStatus.OK or "login" in str(response.url):
-                    LOGGER.debug(
-                        "Scraping failed or redirected to login, retrying auth..."
-                    )
-                    await self.async_login()
-                    async with self._session.get(
-                        url, headers=headers
-                    ) as response_retry:
-                        LOGGER.debug("Retry Scraping URL: %s", response_retry.url)
-                        if response_retry.status != HTTPStatus.OK:
-                            raise IndygoPoolApiClientCommunicationError(
-                                f"Failed to fetch devices page: {response_retry.status}"
-                            )
-                        text = await response_retry.text()
-                else:
-                    text = await response.text()
+        # Parse IPX Module Metadata (from same page)
+        self._ipx_module_metadata = self._parser.parse_ipx_module(text)
 
-            # Parse HTML
-            pool_address, relay_id, pool_metadata = self._parser.parse_pool_ids(
-                text, self._pool_id
+        if not pool_address or not relay_id:
+            LOGGER.error("HTML (truncated): %s", text[:1000])
+            raise IndygoPoolApiClientError(
+                "Could not determine Pool Address or Relay ID."
             )
 
-            # Parse IPX Module Metadata (from same page)
-            self._ipx_module_metadata = self._parser.parse_ipx_module(text)
+        self._pool_address = pool_address
+        self._relay_id = relay_id
+        self._pool_metadata = pool_metadata
 
-            if not pool_address or not relay_id:
-                LOGGER.error("HTML (truncated): %s", text[:1000])
-                raise IndygoPoolApiClientError(
-                    "Could not determine Pool Address or Relay ID."
-                )
-
-            self._pool_address = pool_address
-            self._relay_id = relay_id
-            self._pool_metadata = pool_metadata
-
-            LOGGER.debug(
-                "Refreshed scraped data: gateway_serial=%s, device_short_id=%s",
-                self._pool_address,
-                self._relay_id,
-            )
-
-        except aiohttp.ClientError as exception:
-            raise IndygoPoolApiClientCommunicationError(
-                f"Error during scraping: {exception}"
-            ) from exception
+        LOGGER.debug(
+            "Refreshed scraped data: gateway_serial=%s, device_short_id=%s",
+            self._pool_address,
+            self._relay_id,
+        )
 
     async def async_get_data(self) -> IndygoPoolData:
         """Get data from the API."""
@@ -172,58 +218,38 @@ class IndygoPoolApiClient:
                 "Pool Address or Relay ID missing after discovery"
             )
 
-        try:
-            url = f"https://myindygo.com/v1/module/{self._pool_address}/status/{self._relay_id}"
-            headers = {
-                "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
-                "Referer": f"https://myindygo.com/pools/{self._pool_id}/devices",
-                "Origin": "https://myindygo.com",
-                "User-Agent": (
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/120.0.0.0 Safari/537.36"
-                ),
-                "x-requested-with": "XMLHttpRequest",
-                "accept": "version=2.1",
-            }
+        url = f"https://myindygo.com/v1/module/{self._pool_address}/status/{self._relay_id}"
+        headers = {
+            "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Referer": f"https://myindygo.com/pools/{self._pool_id}/devices",
+            "Origin": "https://myindygo.com",
+            # User-Agent is in DEFAULT_HEADERS
+            "x-requested-with": "XMLHttpRequest",
+            "accept": "version=2.1",
+        }
 
-            LOGGER.debug("Fetching data from %s", url)
+        LOGGER.debug("Fetching data from %s", url)
 
-            async with self._session.get(url, headers=headers) as response:
-                if response.status in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN):
-                    # Session expired, re-login
-                    await self.async_login()
-                    async with self._session.get(
-                        url, headers=headers
-                    ) as response_retry:
-                        if response_retry.status != HTTPStatus.OK:
-                            raise IndygoPoolApiClientCommunicationError(
-                                "Error fetching data after re-login: "
-                                f"{response_retry.status}"
-                            )
-                        data = await response_retry.json()
-                elif response.status != HTTPStatus.OK:
-                    raise IndygoPoolApiClientCommunicationError(
-                        f"Error fetching data: {response.status}"
-                    )
-                else:
-                    data = await response.json()
-                    LOGGER.debug("API Data received: %s", data)
+        # get_request handles re-login if 401/403
+        data = await self._request(
+            "GET", url, headers=headers, return_json=True, retry_auth=True
+        )
+        if not isinstance(data, dict):
+            # Should not happen if return_json=True and successful
+            # But _request type hint allows str.
+            # If it was a string, likely an error page or something went wrong?
+            # For now assume it worked or _request raised.
+            data = {}
 
-                # Merge with metadata if available for completeness
-                # (Parser might use it if we passed it, but we can also just inject it
-                # into the data dict or handle it in parser)
-                if self._pool_metadata:
-                    data.update(self._pool_metadata)
-                if self._ipx_module_metadata:
-                    data["ipx_module"] = self._ipx_module_metadata
+        LOGGER.debug("API Data received: %s", data)
 
-                # Parse data
-                return self._parser.parse_data(
-                    data, self._pool_id, self._pool_address, self._relay_id
-                )
+        # Merge with metadata if available for completeness
+        if self._pool_metadata:
+            data.update(self._pool_metadata)
+        if self._ipx_module_metadata:
+            data["ipx_module"] = self._ipx_module_metadata
 
-        except aiohttp.ClientError as exception:
-            raise IndygoPoolApiClientCommunicationError(
-                f"Error communicating with API: {exception}"
-            ) from exception
+        # Parse data
+        return self._parser.parse_data(
+            data, self._pool_id, self._pool_address, self._relay_id
+        )
