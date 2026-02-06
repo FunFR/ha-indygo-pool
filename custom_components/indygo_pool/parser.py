@@ -8,16 +8,25 @@ import re
 from enum import Enum
 
 try:
+    from enum import StrEnum
+except ImportError:
+    # Python < 3.11 fallback
+    class StrEnum(str, Enum):  # noqa: UP042
+        pass
+
+
+try:
     from homeassistant.const import EntityCategory
 except ImportError:
     # Fallback for environments where EntityCategory is not available (e.g. old tests)
-    class EntityCategory(str, Enum):
+    class EntityCategory(StrEnum):
         """Entity category."""
 
         CONFIG = "config"
         DIAGNOSTIC = "diagnostic"
 
 
+from .const import PROGRAM_TYPE_FILTRATION
 from .models import IndygoModuleData, IndygoPoolData, IndygoSensorData
 
 _LOGGER = logging.getLogger(__name__)
@@ -145,8 +154,39 @@ class IndygoParser:
                     _LOGGER.error("Failed to decode ipxModule JSON: %s", exc)
         return ipx_metadata
 
+    def parse_programs_from_html(self, html: str) -> dict[str, list[dict]]:
+        """Parse programs from embedded HTML JSON."""
+        programs_map = {}
+
+        # Regex for 'const poolCommand'
+        regex = re.compile(
+            r"(?:var|let|const|window\.)?\s*poolCommand\s*=\s*(\{)", re.IGNORECASE
+        )
+        match = regex.search(html)
+        if match:
+            start_index = match.start(1)
+            json_str = self.extract_json_object(html, start_index)
+            if json_str:
+                try:
+                    data = json.loads(json_str)
+                    if "programs" in data and isinstance(data["programs"], list):
+                        for prog in data["programs"]:
+                            m_id = prog.get("module")
+                            if m_id:
+                                if m_id not in programs_map:
+                                    programs_map[m_id] = []
+                                programs_map[m_id].append(prog)
+                except json.JSONDecodeError as exc:
+                    _LOGGER.error("Failed to decode poolCommand JSON: %s", exc)
+        return programs_map
+
     def parse_data(
-        self, json_data: dict, pool_id: str, pool_address: str, relay_id: str
+        self,
+        json_data: dict,
+        pool_id: str,
+        pool_address: str,
+        relay_id: str,
+        scraped_programs: dict[str, list[dict]] | None = None,
     ) -> IndygoPoolData:
         """Parse the API response into a structured IndygoPoolData object."""
         pool_data = IndygoPoolData(
@@ -155,8 +195,8 @@ class IndygoParser:
 
         self._parse_root_sensors(json_data, pool_data)
         self._parse_sensor_state(json_data, pool_data)
-        self._parse_modules(json_data, pool_data)
-        self._parse_modules(json_data, pool_data)
+        self._parse_modules(json_data, pool_data, scraped_programs)
+        # self._parse_modules called twice in original code? Removing duplicate call.
         self._parse_scraped_ipx(json_data, pool_data)
         self._parse_pool_status_list(json_data, pool_data)
 
@@ -222,7 +262,12 @@ class IndygoParser:
                 if idx == 0 and val is not None:
                     pass
 
-    def _parse_modules(self, json_data: dict, pool_data: IndygoPoolData) -> None:
+    def _parse_modules(
+        self,
+        json_data: dict,
+        pool_data: IndygoPoolData,
+        scraped_programs: dict[str, list[dict]] | None = None,
+    ) -> None:
         """Parse modules list."""
         if "modules" in json_data:
             for module in json_data["modules"]:
@@ -247,6 +292,26 @@ class IndygoParser:
                                 entity_category=EntityCategory.DIAGNOSTIC,
                             )
                         )
+
+                # Programs parsing
+                programs = []
+                if "programs" in module:
+                    programs = module["programs"]
+                elif scraped_programs and str(m_id) in scraped_programs:
+                    # fallback to scraped programs
+                    programs = scraped_programs[str(m_id)]
+
+                if programs:
+                    indygo_module.programs = programs
+                    # Find filtration program (type 4)
+                    for prog in programs:
+                        if (
+                            "programCharacteristics" in prog
+                            and prog["programCharacteristics"].get("programType")
+                            == PROGRAM_TYPE_FILTRATION
+                        ):
+                            indygo_module.filtration_program = prog
+                            break
 
                 pool_data.modules[str(m_id)] = indygo_module
 

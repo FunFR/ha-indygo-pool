@@ -29,6 +29,8 @@ class IndygoModuleData:
     name: str
     sensors: dict[str, IndygoSensorData] = field(default_factory=dict)
     raw_data: dict[str, Any] = field(default_factory=dict)
+    programs: list[dict[str, Any]] = field(default_factory=list)
+    filtration_program: dict[str, Any] | None = None
 
 
 @dataclass
