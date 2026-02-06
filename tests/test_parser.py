@@ -14,6 +14,9 @@ TEST_PH_SETPOINT = 7.4
 TEST_SALT_VALUE = 3.0
 TEST_PROD_SETPOINT = 80
 TEST_DATE = "2023-01-01T12:00:00Z"
+FILTRATION_PROGRAM_TYPE = 4
+MODE_AUTO = 2
+MODE_ON = 1
 
 
 class TestIndygoParser:
@@ -124,3 +127,48 @@ class TestIndygoParser:
             pool_data.sensors["ph"].extra_attributes["last_measurement_time"]
             == TEST_DATE
         )
+
+    def test_parse_programs_from_html(self):
+        """Test parsing programs from embedded HTML JSON."""
+        parser = IndygoParser()
+        html = (
+            "<script>\n"
+            "    var poolCommand = {\n"
+            '        "module": "MOD_123",\n'
+            '        "programs": [\n'
+            "            {\n"
+            '                "module": "MOD_123",\n'
+            '                "programCharacteristics": {\n'
+            f'                    "programType": {FILTRATION_PROGRAM_TYPE}, '
+            f'"mode": {MODE_AUTO}\n'
+            "                }\n"
+            "            },\n"
+            "            {\n"
+            '                "module": "MOD_123",\n'
+            '                "programCharacteristics": {"programType": 1, "mode": 1}\n'
+            "            }\n"
+            "        ]\n"
+            "    };\n"
+            "</script>"
+        )
+
+        programs_map = parser.parse_programs_from_html(html)
+        assert "MOD_123" in programs_map
+        programs = programs_map["MOD_123"]
+        expected_count = 2
+        assert len(programs) == expected_count
+
+        # Verify filtration program (type 4) matches
+        filt_prog = next(
+            p
+            for p in programs
+            if p["programCharacteristics"]["programType"] == FILTRATION_PROGRAM_TYPE
+        )
+        assert filt_prog["programCharacteristics"]["mode"] == MODE_AUTO
+
+    def test_parse_programs_missing_html(self):
+        """Test parsing programs when HTML/JSON is missing."""
+        parser = IndygoParser()
+        html = "<html><body>No programs here</body></html>"
+        programs_map = parser.parse_programs_from_html(html)
+        assert programs_map == {}

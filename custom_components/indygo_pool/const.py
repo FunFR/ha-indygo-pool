@@ -12,6 +12,8 @@ CONF_EMAIL = "email"
 CONF_PASSWORD = "password"
 CONF_POOL_ID = "pool_id"
 
+PROGRAM_TYPE_FILTRATION = 4
+
 ATTRIBUTION = "Data provided by MyIndygo"
 
 STARTUP_MESSAGE = f"""

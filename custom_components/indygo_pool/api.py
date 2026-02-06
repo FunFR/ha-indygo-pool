@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import copy
+import json
 from http import HTTPStatus
 
 import aiohttp
@@ -52,6 +54,7 @@ class IndygoPoolApiClient:
         self._relay_id: str | None = None
         self._pool_metadata: dict | None = None
         self._ipx_module_metadata: dict | None = None
+        self._scraped_programs: dict[str, list[dict]] | None = None
 
     async def _request(
         self,
@@ -69,6 +72,7 @@ class IndygoPoolApiClient:
             request_headers.update(headers)
 
         try:
+            LOGGER.debug(f"--- REQUEST: {method} {url} ---")
             async with self._session.request(
                 method,
                 url,
@@ -193,6 +197,9 @@ class IndygoPoolApiClient:
         # Parse IPX Module Metadata (from same page)
         self._ipx_module_metadata = self._parser.parse_ipx_module(text)
 
+        # Parse Programs (from embedded JS)
+        self._scraped_programs = self._parser.parse_programs_from_html(text)
+
         if not pool_address or not relay_id:
             LOGGER.error("HTML (truncated): %s", text[:1000])
             raise IndygoPoolApiClientError(
@@ -204,9 +211,11 @@ class IndygoPoolApiClient:
         self._pool_metadata = pool_metadata
 
         LOGGER.debug(
-            "Refreshed scraped data: gateway_serial=%s, device_short_id=%s",
+            "Refreshed scraped data: gateway_serial=%s, device_short_id=%s, "
+            "programs_found=%s",
             self._pool_address,
             self._relay_id,
+            bool(self._scraped_programs),
         )
 
     async def async_get_data(self) -> IndygoPoolData:
@@ -251,5 +260,134 @@ class IndygoPoolApiClient:
 
         # Parse data
         return self._parser.parse_data(
-            data, self._pool_id, self._pool_address, self._relay_id
+            data,
+            self._pool_id,
+            self._pool_address,
+            self._relay_id,
+            scraped_programs=self._scraped_programs,
         )
+
+    async def async_set_filtration_mode(
+        self, module_id: str, full_program_data: dict, mode: int
+    ) -> None:
+        """Set the filtration mode (Auto/Off/On) safely.
+
+        We MUST send back the FULL program object, otherwise we risk corrupting
+        the device configuration (erasing timers, etc.).
+        """
+        # 1. Deep copy to avoid mutating the source
+        program_copy = copy.deepcopy(full_program_data)
+
+        # 2. Update the mode
+        # Mode: 0=OFF, 1=ON, 2=AUTO
+        if "programCharacteristics" in program_copy:
+            program_copy["programCharacteristics"]["mode"] = mode
+        else:
+            raise IndygoPoolApiClientError(
+                "Invalid program data: missing programCharacteristics"
+            )
+
+        # 3. Construct payload
+        payload = {
+            "module": module_id,
+            "programs": [program_copy],
+        }
+
+        url = "https://myindygo.com/program/update"
+
+        LOGGER.debug(
+            "Setting filtration mode to %s for module %s. Payload: %s",
+            mode,
+            module_id,
+            payload,
+        )
+
+        try:
+            # Browser uses PUT with JSON content for update
+            headers = {"Content-Type": "application/json"}
+            await self._request(
+                "PUT",
+                url,
+                headers=headers,
+                data=json.dumps(payload),
+                return_json=True,
+                retry_auth=True,
+            )
+
+            # 4. Trigger remote synchronization
+            await self.async_apply_module_changes(
+                module_id, self._relay_id, program_copy
+            )
+
+        except IndygoPoolApiClientError as exception:
+            LOGGER.error("Failed to set filtration mode: %s", exception)
+            raise
+
+    async def async_apply_module_changes(
+        self,
+        module_id: str,
+        relay_id: str | None,
+        full_program_data: dict | None = None,
+    ) -> None:
+        """Apply changes to the remote module.
+
+        This triggers the synchronization between the Cloud and the physical device.
+        """
+        if not relay_id:
+            LOGGER.warning("Missing relay_id, skipping remote sync")
+            return
+
+        url = "https://myindygo.com/remote/module/configuration/and/programs"
+        payload = {
+            "moduleId": module_id,
+            "relayId": relay_id,
+        }
+
+        LOGGER.debug(
+            "Applying remote changes for module %s (relay: %s)", module_id, relay_id
+        )
+
+        try:
+            headers = {"Content-Type": "application/json"}
+            # 1. Apply configuration to remote
+            await self._request(
+                "POST",
+                url,
+                headers=headers,
+                data=json.dumps(payload),
+                return_json=True,
+                retry_auth=True,
+            )
+
+            # 2. Report module data sent
+            report_module_url = "https://myindygo.com/module/reportModuleDataSent"
+            report_module_payload = {"module": module_id}
+            await self._request(
+                "POST",
+                report_module_url,
+                headers=headers,
+                data=json.dumps(report_module_payload),
+                return_json=True,
+                retry_auth=True,
+            )
+
+            # 3. Report programs data sent
+            if full_program_data:
+                report_prog_url = "https://myindygo.com/program/reportProgramsDataSent"
+                report_prog_payload = {
+                    "module": module_id,
+                    "programs": [full_program_data],
+                }
+                await self._request(
+                    "POST",
+                    report_prog_url,
+                    headers=headers,
+                    data=json.dumps(report_prog_payload),
+                    return_json=True,
+                    retry_auth=True,
+                )
+
+        except IndygoPoolApiClientError as exception:
+            LOGGER.error("Failed to apply remote changes: %s", exception)
+            # We don't necessarily want to fail the whole operation if sync fails,
+            # as the primary PUT update might have succeeded.
