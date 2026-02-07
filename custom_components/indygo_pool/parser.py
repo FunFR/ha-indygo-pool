@@ -70,72 +70,106 @@ class IndygoParser:
 
         return None
 
-    def parse_pool_ids(
-        self, html: str, pool_id: str
-    ) -> tuple[str | None, str | None, dict]:
-        """Parse HTML to find pool address and relay ID.
+    def _extract_device_ids(self, lr_pc: dict) -> tuple[str | None, str | None]:
+        """Extract device short ID and relay ID from lr-pc module.
 
         Returns:
-            Tuple of (pool_address, relay_id, pool_metadata_dict)
+            Tuple of (device_short_id, relay_id)
         """
-        pool_metadata = {}
-        pool_address = None
-        relay_id = None
+        # Device Short ID: from name suffix or last 6 chars of serial
+        name_parts = lr_pc.get("name", "").split("-")
+        if len(name_parts) > 1:
+            device_short_id = name_parts[-1]
+        else:
+            device_short_id = lr_pc.get("serialNumber", "")[-6:]
 
-        # Extract currentPool
+        # Relay ID: from relay field, fallback to device_short_id
+        relay_id = lr_pc.get("relay") or device_short_id
+
+        return device_short_id, relay_id
+
+    def _parse_lr_pc_module(
+        self, modules: list[dict]
+    ) -> tuple[str | None, str | None, str | None]:
+        """Parse lr-pc module to extract pool address and IDs.
+
+        Returns:
+            Tuple of (pool_address, device_short_id, relay_id)
+        """
+        gateway = next((m for m in modules if m.get("type") == "lr-mb-10"), None)
+        lr_pc = next((m for m in modules if m.get("type") == "lr-pc"), None)
+
+        if not lr_pc:
+            return None, None, None
+
+        # Use lr-pc as gateway if no dedicated gateway found
+        if not gateway:
+            gateway = lr_pc
+
+        pool_address = gateway.get("serialNumber")
+        device_short_id, relay_id = self._extract_device_ids(lr_pc)
+
+        return pool_address, device_short_id, relay_id
+
+    def _parse_ipx_module(
+        self, modules: list[dict]
+    ) -> tuple[str | None, str | None, str | None]:
+        """Parse IPX module as fallback.
+
+        Returns:
+            Tuple of (pool_address, device_short_id, relay_id)
+        """
+        ipx = next((m for m in modules if m.get("type") == "ipx"), None)
+        if not ipx:
+            return None, None, None
+
+        pool_address = ipx.get("serialNumber")
+        device_short_id = ipx.get("ipxRelay")
+        relay_id = device_short_id  # For IPX, they're the same
+
+        return pool_address, device_short_id, relay_id
+
+    def parse_pool_ids(
+        self, html: str, pool_id: str
+    ) -> tuple[str | None, str | None, str | None, dict]:
+        """Parse HTML to find pool address, device short ID, and relay ID.
+
+        Returns:
+            Tuple of (pool_address, device_short_id, relay_id, pool_metadata_dict)
+        """
+        # Extract currentPool JSON
         start_regex = re.compile(
             r"(?:var|let|const|window\.)?\s*currentPool\s*=\s*(\{)", re.IGNORECASE
         )
         match = start_regex.search(html)
-        if match:
-            start_index = match.start(1)
-            json_str = self.extract_json_object(html, start_index)
-            if json_str:
-                try:
-                    pool_metadata = json.loads(json_str)
-                except json.JSONDecodeError as exc:
-                    _LOGGER.error("Failed to decode currentPool JSON: %s", exc)
+        if not match:
+            return None, None, None, {}
 
-        if not pool_metadata:
-            # Basic validation
-            return None, None, {}
+        start_index = match.start(1)
+        json_str = self.extract_json_object(html, start_index)
+        if not json_str:
+            return None, None, None, {}
 
-        # Logic: Prioritize lr-pc (gateway + relay ID)
-        if "modules" in pool_metadata:
-            modules = pool_metadata["modules"]
+        try:
+            pool_metadata = json.loads(json_str)
+        except json.JSONDecodeError as exc:
+            _LOGGER.error("Failed to decode currentPool JSON: %s", exc)
+            return None, None, None, {}
 
-            # 1. Try to find gateway (lr-mb-10)
-            gateway = next((m for m in modules if m.get("type") == "lr-mb-10"), None)
+        # Extract module information
+        modules = pool_metadata.get("modules", [])
+        if not modules:
+            return None, None, None, {}
 
-            # 2. Try to find main device (lr-pc)
-            lr_pc = next((m for m in modules if m.get("type") == "lr-pc"), None)
+        # Try lr-pc first, fallback to IPX
+        pool_address, device_short_id, relay_id = self._parse_lr_pc_module(modules)
+        if not pool_address:
+            pool_address, device_short_id, relay_id = self._parse_ipx_module(modules)
 
-            if lr_pc:
-                if not gateway:
-                    # Fallback: assume lr-pc is gateway if no dedicated gateway found
-                    gateway = lr_pc
+        if not pool_address:
+            _LOGGER.error("No compatible module (lr-pc or ipx) found in modules list.")
 
-                pool_address = gateway.get("serialNumber")
-
-                # Relay ID from lr-pc
-                name_parts = lr_pc.get("name", "").split("-")
-                if len(name_parts) > 1:
-                    relay_id = name_parts[-1]
-                else:
-                    relay_id = lr_pc.get("serialNumber")[-6:]
-
-            else:
-                # Fallback for IPX only
-                ipx = next((m for m in modules if m.get("type") == "ipx"), None)
-                if ipx:
-                    pool_address = ipx.get("serialNumber")
-                    relay_id = ipx.get("ipxRelay")
-                else:
-                    _LOGGER.error(
-                        "No compatible module (lr-pc or ipx) found in modules list."
-                    )
-
-        return pool_address, relay_id, pool_metadata
+        return pool_address, device_short_id, relay_id, pool_metadata
 
     def parse_ipx_module(self, html: str) -> dict:
         """Parse HTML to find ipxModule data (embedded JS)."""

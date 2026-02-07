@@ -53,7 +53,9 @@ class TestIndygoParser:
             "    };\n"
             "</script>"
         )
-        pool_address, relay_id, metadata = parser.parse_pool_ids(html, TEST_POOL_ID)
+        pool_address, device_short_id, relay_id, metadata = parser.parse_pool_ids(
+            html, TEST_POOL_ID
+        )
         assert pool_address == TEST_GATEWAY_SERIAL
         assert relay_id == TEST_RELAY_ID
         assert metadata["id"] == int(TEST_POOL_ID)
