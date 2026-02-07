@@ -57,89 +57,116 @@ async def test_api_client_authentication():  # noqa: PLR0912, PLR0915
             pytest.fail(f"API call failed: {e}")
 
 
+TEST_POOL_ID = "12345"
+TEST_MODULE_ID = "mod_123"
+TEST_RELAY_ID = "relay_123"
+TEST_POOL_ADDRESS = "pool_123"
+
+
+def _verify_request_payload(mock_obj, method: str, url: str, expected_data: dict):
+    """Helper to verify API request payload."""
+    key = (method, URL(url))
+    assert key in mock_obj.requests
+    req = mock_obj.requests[key][0]
+    payload = json.loads(req.kwargs["data"])
+    for field, value in expected_data.items():
+        if "." in field:  # Nested field like "programs.0.mode"
+            parts = field.split(".")
+            actual = payload
+            for part in parts:
+                if part.isdigit():
+                    actual = actual[int(part)]
+                else:
+                    actual = actual[part]
+            assert actual == value
+        else:
+            assert payload[field] == value
+
+
 @pytest.mark.asyncio
 async def test_set_filtration_mode():
     """Test setting filtration mode with mocked session."""
     if aioresponses is None:
         pytest.skip("aioresponses not installed")
 
-    pool_id = "12345"
-    module_id = "mod_123"
-    relay_id = "relay_123"
-    # Minimal filtration program data
     filt_program = {
         "id": "prog_1",
         "programCharacteristics": {"mode": 0, "programType": 4},
     }
-
-    # Expected payload should have mode updated to 2 (Auto)
     expected_mode = 2
 
     with aioresponses() as m:
-        # 1. Mock the program update (PUT)
-        update_url = "https://myindygo.com/program/update"
-        m.put(update_url, payload={"status": "ok"})
-
-        # 2. Mock the remote sync (POST)
-        sync_url = "https://myindygo.com/remote/module/configuration/and/programs"
-        m.post(sync_url, payload={"status": "ok"})
-
-        # 3. Mock the module report (POST)
-        report_url = "https://myindygo.com/module/reportModuleDataSent"
-        m.post(report_url, payload={"status": "ok"})
-
-        # 4. Mock the programs report (POST)
-        report_prog_url = "https://myindygo.com/program/reportProgramsDataSent"
-        m.post(report_prog_url, payload={"status": "ok"})
+        # Mock all API endpoints
+        m.put("https://myindygo.com/module/update", payload={"status": "ok"})
+        m.put("https://myindygo.com/program/update", payload={"status": "ok"})
+        m.post(
+            "https://myindygo.com/remote/module/configuration/and/programs",
+            payload={"status": "ok"},
+        )
+        m.post(
+            "https://myindygo.com/module/reportModuleDataSent",
+            payload={"status": "ok"},
+        )
+        m.post(
+            "https://myindygo.com/program/reportProgramsDataSent",
+            payload={"status": "ok"},
+        )
+        m.post("https://myindygo.com/remote/module/control", payload={"status": "ok"})
 
         async with aiohttp.ClientSession() as session:
-            client = IndygoPoolApiClient("test@example.com", "pass", pool_id, session)
-            # Inject relay_id and fake token
-            client._relay_id = relay_id
+            client = IndygoPoolApiClient(
+                "test@example.com", "pass", TEST_POOL_ID, session
+            )
+            client._relay_id = TEST_RELAY_ID
+            client._pool_address = TEST_POOL_ADDRESS
             client._token = "fake_token"
 
             await client.async_set_filtration_mode(
-                module_id, filt_program, expected_mode
+                TEST_MODULE_ID, filt_program, expected_mode
             )
 
-            # 1. Verify PUT exists and has correct payload
-            update_key = ("PUT", URL(update_url))
-            assert update_key in m.requests
-            put_req = m.requests[update_key][0]
-            payload_sent = json.loads(put_req.kwargs["data"])
-            assert payload_sent["module"] == module_id
-            assert (
-                payload_sent["programs"][0]["programCharacteristics"]["mode"]
-                == expected_mode
+            # Verify program update
+            _verify_request_payload(
+                m,
+                "PUT",
+                "https://myindygo.com/program/update",
+                {
+                    "module": TEST_MODULE_ID,
+                    "programs.0.programCharacteristics.mode": expected_mode,
+                },
             )
 
-            # 2. Verify POST sync exists and has correct payload
-            sync_key = ("POST", URL(sync_url))
-            assert sync_key in m.requests
-            sync_req = m.requests[sync_key][0]
-            sync_payload = json.loads(sync_req.kwargs["data"])
-            assert sync_payload["moduleId"] == module_id
-            assert sync_payload["relayId"] == relay_id
-
-            # 3. Verify POST report module exists and has correct payload
-            report_module_key = ("POST", URL(report_url))
-            assert report_module_key in m.requests
-            report_module_req = m.requests[report_module_key][0]
-            report_module_payload = json.loads(report_module_req.kwargs["data"])
-            assert report_module_payload["module"] == module_id
-
-            # 4. Verify POST report programs exists and has correct payload
-            report_prog_url = "https://myindygo.com/program/reportProgramsDataSent"
-            report_prog_key = ("POST", URL(report_prog_url))
-            assert report_prog_key in m.requests
-            report_prog_req = m.requests[report_prog_key][0]
-            report_prog_payload = json.loads(report_prog_req.kwargs["data"])
-            assert report_prog_payload["module"] == module_id
-            assert report_prog_payload["programs"][0]["id"] == filt_program["id"]
-            assert (
-                report_prog_payload["programs"][0]["programCharacteristics"]["mode"]
-                == expected_mode
+            # Verify remote sync
+            _verify_request_payload(
+                m,
+                "POST",
+                "https://myindygo.com/remote/module/configuration/and/programs",
+                {"moduleId": TEST_MODULE_ID, "relayId": TEST_RELAY_ID},
             )
+
+            # Verify module report
+            _verify_request_payload(
+                m,
+                "POST",
+                "https://myindygo.com/module/reportModuleDataSent",
+                {"module": TEST_MODULE_ID},
+            )
+
+            # Verify programs report
+            _verify_request_payload(
+                m,
+                "POST",
+                "https://myindygo.com/program/reportProgramsDataSent",
+                {
+                    "module": TEST_MODULE_ID,
+                    "programs.0.id": filt_program["id"],
+                    "programs.0.programCharacteristics.mode": expected_mode,
+                },
+            )
+
+            # Remote control is NOT called for AUTO mode
+            control_key = ("POST", URL("https://myindygo.com/remote/module/control"))
+            assert control_key not in m.requests
 
 
 @pytest.mark.asyncio
@@ -158,17 +185,22 @@ async def test_set_filtration_mode_sync_failure():
     expected_mode = 0  # OFF
 
     with aioresponses() as m:
-        # 1. Mock the program update (PUT) - SUCCESS
+        # 1. Mock the module update (PUT) - SUCCESS
+        module_url = "https://myindygo.com/module/update"
+        m.put(module_url, payload={"status": "ok"})
+
+        # 2. Mock the program update (PUT) - SUCCESS
         update_url = "https://myindygo.com/program/update"
         m.put(update_url, payload={"status": "ok"})
 
-        # 2. Mock the remote sync (POST) - FAILURE (500)
+        # 3. Mock the remote sync (POST) - FAILURE (500)
         sync_url = "https://myindygo.com/remote/module/configuration/and/programs"
         m.post(sync_url, status=500)
 
         async with aiohttp.ClientSession() as session:
             client = IndygoPoolApiClient("test@example.com", "pass", pool_id, session)
             client._relay_id = relay_id
+            client._pool_address = "pool_123"
             client._token = "fake_token"
 
             # Should NOT raise exception because errors in sync are caught and logged
@@ -201,6 +233,7 @@ async def test_set_filtration_mode_parameterized(new_mode):
     }
 
     with aioresponses() as m:
+        m.put("https://myindygo.com/module/update", payload={"status": "ok"})
         m.put("https://myindygo.com/program/update", payload={"status": "ok"})
         m.post(
             "https://myindygo.com/remote/module/configuration/and/programs",
@@ -213,10 +246,15 @@ async def test_set_filtration_mode_parameterized(new_mode):
             "https://myindygo.com/program/reportProgramsDataSent",
             payload={"status": "ok"},
         )
+        m.post(
+            "https://myindygo.com/remote/module/control",
+            payload={"status": "ok"},
+        )
 
         async with aiohttp.ClientSession() as session:
             client = IndygoPoolApiClient("test@example.com", "pass", pool_id, session)
             client._relay_id = relay_id
+            client._pool_address = "pool_123"
             client._token = "fake_token"
 
             await client.async_set_filtration_mode(module_id, filt_program, new_mode)
@@ -229,3 +267,16 @@ async def test_set_filtration_mode_parameterized(new_mode):
                 report_prog_payload["programs"][0]["programCharacteristics"]["mode"]
                 == new_mode
             )
+
+            # Remote control is only called for OFF mode (mode 0)
+            # Modes 1 (ON) and 2 (AUTO) rely on program synchronization only
+            control_url = "https://myindygo.com/remote/module/control"
+            control_key = ("POST", URL(control_url))
+            if new_mode == 0:  # OFF mode
+                assert control_key in m.requests
+                control_req = m.requests[control_key][0]
+                control_payload = json.loads(control_req.kwargs["data"])
+                assert control_payload["linesControl"][0]["mode"] == "off"
+                assert control_payload["linesControl"][0]["action"] == 1
+            else:  # ON or AUTO mode - no remote control call
+                assert control_key not in m.requests

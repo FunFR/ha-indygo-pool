@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import aiohttp
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import (
     IndygoPoolApiClient,
@@ -66,13 +66,19 @@ class IndygoPoolFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def _test_credentials(self, email: str, password: str, pool_id: str) -> None:
         """Validate credentials."""
+        # Create a dedicated session with cookie jar for authentication
+        cookie_jar = aiohttp.CookieJar(unsafe=True)
+        session = aiohttp.ClientSession(cookie_jar=cookie_jar)
 
-        session = async_get_clientsession(self.hass)
-        client = IndygoPoolApiClient(
-            email=email,
-            password=password,
-            pool_id=pool_id,
-            session=session,
-        )
-        # Test credentials by attempting to get data
-        await client.async_get_data()
+        try:
+            client = IndygoPoolApiClient(
+                email=email,
+                password=password,
+                pool_id=pool_id,
+                session=session,
+            )
+            # Test credentials by attempting to get data
+            await client.async_get_data()
+        finally:
+            # Always close the session
+            await session.close()
