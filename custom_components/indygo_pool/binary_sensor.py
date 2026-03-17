@@ -62,6 +62,7 @@ async def async_setup_entry(
                             name="Shutter",
                             device_class=BinarySensorDeviceClass.WINDOW,
                             sub_path="ipxData.deviceState",
+                            is_inverted=True,
                         )
                     )
 
@@ -115,6 +116,7 @@ class IndygoPoolBinarySensor(IndygoPoolEntity, BinarySensorEntity):
         sub_path: str | None = None,
         entity_category: EntityCategory | None = None,
         is_pool_status: bool = False,
+        is_inverted: bool = False,
     ) -> None:
         """Initialize."""
         super().__init__(coordinator)
@@ -122,6 +124,7 @@ class IndygoPoolBinarySensor(IndygoPoolEntity, BinarySensorEntity):
         self._key = key
         self._sub_path = sub_path
         self._is_pool_status = is_pool_status
+        self._is_inverted = is_inverted
 
         # Unique ID: ModuleID_Key
         # Use config entry id prefix for safety?
@@ -166,12 +169,13 @@ class IndygoPoolBinarySensor(IndygoPoolEntity, BinarySensorEntity):
 
             # Handle boolean directly
             if isinstance(val, bool):
-                return val
+                return not val if self._is_inverted else val
 
             # Handle numbers (1.0 = True?)
             if val is not None:
                 try:
-                    return float(val) == 1.0
+                    is_true = float(val) == 1.0
+                    return not is_true if self._is_inverted else is_true
                 except (ValueError, TypeError):
                     pass
 

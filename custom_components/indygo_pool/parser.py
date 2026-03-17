@@ -40,14 +40,27 @@ class IndygoParser:
 
     @staticmethod
     def extract_json_object(text: str, start_index: int) -> str | None:
-        """Extract a JSON object from text starting at start_index.
+        """Extract a JSON object or array from text starting at start_index.
 
-        This handles nested braces correctly to extract a full JSON object string
-        embedded within JavaScript.
+        This handles nested braces/brackets correctly to extract a full JSON
+        object or array string embedded within JavaScript.
         """
         brace_count = 0
         in_string = False
         escape = False
+        open_char = None
+        close_char = None
+
+        # Find the first opening brace/bracket
+        for i in range(start_index, len(text)):
+            if text[i] in "{[":
+                open_char = text[i]
+                close_char = "}" if open_char == "{" else "]"
+                start_index = i
+                break
+
+        if not open_char:
+            return None
 
         for i in range(start_index, len(text)):
             char = text[i]
@@ -61,9 +74,9 @@ class IndygoParser:
                     in_string = False
             elif char == '"':
                 in_string = True
-            elif char == "{":
+            elif char == open_char:
                 brace_count += 1
-            elif char == "}":
+            elif char == close_char:
                 brace_count -= 1
                 if brace_count == 0:
                     return text[start_index : i + 1]
@@ -139,21 +152,41 @@ class IndygoParser:
         """
         # Extract currentPool JSON
         start_regex = re.compile(
-            r"(?:var|let|const|window\.)?\s*currentPool\s*=\s*(\{)", re.IGNORECASE
+            r"(?:var|let|const|window\.)?\s*currentPool\s*=\s*([{\[])", re.IGNORECASE
         )
         match = start_regex.search(html)
-        if not match:
-            return None, None, None, {}
 
-        start_index = match.start(1)
-        json_str = self.extract_json_object(html, start_index)
-        if not json_str:
-            return None, None, None, {}
+        json_str = None
+        pool_metadata = {}
 
-        try:
-            pool_metadata = json.loads(json_str)
-        except json.JSONDecodeError as exc:
-            _LOGGER.error("Failed to decode currentPool JSON: %s", exc)
+        if match:
+            start_index = match.start(1)
+            json_str = self.extract_json_object(html, start_index)
+
+        if json_str:
+            try:
+                pool_metadata = json.loads(json_str)
+            except json.JSONDecodeError as exc:
+                _LOGGER.error("Failed to decode currentPool JSON: %s", exc)
+                return None, None, None, {}
+        else:
+            # Fallback to modulesInPool
+            modules_regex = re.compile(
+                r"(?:var|let|const|window\.)?\s*modulesInPool\s*=\s*(\[)", re.IGNORECASE
+            )
+            match = modules_regex.search(html)
+            if match:
+                start_index = match.start(1)
+                json_str = self.extract_json_object(html, start_index)
+                if json_str:
+                    try:
+                        modules_list = json.loads(json_str)
+                        pool_metadata = {"modules": modules_list}
+                    except json.JSONDecodeError as exc:
+                        _LOGGER.error("Failed to decode modulesInPool JSON: %s", exc)
+                        return None, None, None, {}
+
+        if not pool_metadata:
             return None, None, None, {}
 
         # Extract module information
@@ -174,44 +207,87 @@ class IndygoParser:
     def parse_ipx_module(self, html: str) -> dict:
         """Parse HTML to find ipxModule data (embedded JS)."""
         ipx_metadata = {}
+
+        # 1. Search for poolTechModulesIpx (contains outputs for electrolyzer settings)
+        pooltech_regex = re.compile(
+            r"(?:var|let|const|window\.)?\s*poolTechModulesIpx\s*=\s*(\[)",
+            re.IGNORECASE,
+        )
+        match = pooltech_regex.search(html)
+        if match and (json_str := self.extract_json_object(html, match.start(1))):
+            try:
+                modules_list = json.loads(json_str)
+                for m in modules_list:
+                    if m.get("type", "").startswith("ipx"):
+                        ipx_metadata = m
+                        return ipx_metadata
+            except json.JSONDecodeError as exc:
+                _LOGGER.error("Failed to decode poolTechModulesIpx JSON: %s", exc)
+
+        # 2. Search for ipxModule (legacy single object)
         ipx_start_regex = re.compile(
             r"(?:var|let|const|window\.)?\s*ipxModule\s*=\s*(\{)", re.IGNORECASE
         )
-        ipx_match = ipx_start_regex.search(html)
-        if ipx_match:
-            ipx_start_index = ipx_match.start(1)
-            ipx_json_str = self.extract_json_object(html, ipx_start_index)
-            if ipx_json_str:
-                try:
-                    ipx_metadata = json.loads(ipx_json_str)
-                except json.JSONDecodeError as exc:
-                    _LOGGER.error("Failed to decode ipxModule JSON: %s", exc)
+        match = ipx_start_regex.search(html)
+        if match and (json_str := self.extract_json_object(html, match.start(1))):
+            try:
+                ipx_metadata = json.loads(json_str)
+                return ipx_metadata
+            except json.JSONDecodeError as exc:
+                _LOGGER.error("Failed to decode ipxModule JSON: %s", exc)
+
+        # 3. Fallback to modulesInPool (new general module list but misses outputs)
+        modules_regex = re.compile(
+            r"(?:var|let|const|window\.)?\s*modulesInPool\s*=\s*(\[)", re.IGNORECASE
+        )
+        match = modules_regex.search(html)
+        if match and (json_str := self.extract_json_object(html, match.start(1))):
+            try:
+                modules_list = json.loads(json_str)
+                for m in modules_list:
+                    if m.get("type", "").startswith("ipx"):
+                        ipx_metadata = m
+                        break
+            except json.JSONDecodeError as exc:
+                _LOGGER.error("Failed to decode modulesInPool JSON: %s", exc)
+
         return ipx_metadata
 
     def parse_programs_from_html(self, html: str) -> dict[str, list[dict]]:
         """Parse programs from embedded HTML JSON."""
-        programs_map = {}
+        programs_map: dict[str, list[dict]] = {}
 
         # Regex for 'const poolCommand'
         regex = re.compile(
             r"(?:var|let|const|window\.)?\s*poolCommand\s*=\s*(\{)", re.IGNORECASE
         )
         match = regex.search(html)
-        if match:
-            start_index = match.start(1)
-            json_str = self.extract_json_object(html, start_index)
-            if json_str:
-                try:
-                    data = json.loads(json_str)
-                    if "programs" in data and isinstance(data["programs"], list):
-                        for prog in data["programs"]:
-                            m_id = prog.get("module")
-                            if m_id:
-                                if m_id not in programs_map:
-                                    programs_map[m_id] = []
-                                programs_map[m_id].append(prog)
-                except json.JSONDecodeError as exc:
-                    _LOGGER.error("Failed to decode poolCommand JSON: %s", exc)
+        if match and (json_str := self.extract_json_object(html, match.start(1))):
+            try:
+                data = json.loads(json_str)
+                programs = data.get("programs", [])
+                if isinstance(programs, list):
+                    for prog in programs:
+                        if m_id := prog.get("module"):
+                            programs_map.setdefault(m_id, []).append(prog)
+            except json.JSONDecodeError as exc:
+                _LOGGER.error("Failed to decode poolCommand JSON: %s", exc)
+            return programs_map
+
+        # Fallback to modulesInPool
+        modules_regex = re.compile(
+            r"(?:var|let|const|window\.)?\s*modulesInPool\s*=\s*(\[)", re.IGNORECASE
+        )
+        match = modules_regex.search(html)
+        if match and (json_str := self.extract_json_object(html, match.start(1))):
+            try:
+                for m in json.loads(json_str):
+                    programs = m.get("programs", [])
+                    m_id = str(m.get("id", ""))
+                    if programs and m_id:
+                        programs_map[m_id] = programs
+            except json.JSONDecodeError as exc:
+                _LOGGER.error("Failed to decode modulesInPool JSON: %s", exc)
         return programs_map
 
     def parse_data(
