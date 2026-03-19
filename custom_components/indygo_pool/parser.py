@@ -370,7 +370,18 @@ class IndygoParser:
                 idx = sensor_item.get("index")
                 val = sensor_item.get("value")
                 if idx == 0 and val is not None:
-                    pass
+                    # Index 0 is water temperature in 1/100th of degree
+                    temp_c = val / 100.0
+                    if "temperature" in pool_data.sensors:
+                        pool_data.sensors["temperature"].value = temp_c
+                    else:
+                        pool_data.sensors["temperature"] = IndygoSensorData(
+                            key="temperature",
+                            name="Water Temperature",
+                            value=temp_c,
+                            unit="°C",
+                            device_class="temperature",
+                        )
 
     def _parse_modules(
         self,

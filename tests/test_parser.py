@@ -13,6 +13,7 @@ TEST_ELECTROLYSE_DURATION = 100
 TEST_PH_SETPOINT = 7.4
 TEST_SALT_VALUE = 3.0
 TEST_PROD_SETPOINT = 80
+TEST_SENSOR_STATE_TEMP = 1355
 TEST_DATE = "2023-01-01T12:00:00Z"
 FILTRATION_PROGRAM_TYPE = 4
 MODE_AUTO = 2
@@ -68,6 +69,7 @@ class TestIndygoParser:
         json_data = {
             "temperature": TEST_TEMP_VALUE,
             "temperatureTime": TEST_DATE,
+            "sensorState": [{"index": 0, "value": TEST_SENSOR_STATE_TEMP}],
             "ph": TEST_PH_VALUE,
             "modules": [
                 {
@@ -105,7 +107,7 @@ class TestIndygoParser:
 
         assert isinstance(pool_data, IndygoPoolData)
         assert pool_data.pool_id == "POOL1"
-        assert pool_data.sensors["temperature"].value == TEST_TEMP_VALUE
+        assert pool_data.sensors["temperature"].value == TEST_SENSOR_STATE_TEMP / 100.0
         assert (
             pool_data.sensors["temperature"].extra_attributes["last_measurement_time"]
             == TEST_DATE
