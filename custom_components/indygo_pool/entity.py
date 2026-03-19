@@ -24,11 +24,10 @@ class IndygoPoolEntity(CoordinatorEntity[IndygoPoolDataUpdateCoordinator]):
                 self._attr_unique_id = coordinator.data.pool_id
             else:
                 self._attr_unique_id = coordinator.config_entry.entry_id
-
-            name = f"{self._attr_unique_id}"
+            name = f"{NAME} {self._attr_unique_id[:8]}"
         else:
             self._attr_unique_id = coordinator.config_entry.entry_id
-            name = f"{self._attr_unique_id}"
+            name = f"{NAME} {self._attr_unique_id[:8]}"
 
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._attr_unique_id)},
