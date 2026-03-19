@@ -15,17 +15,6 @@ except ImportError:
         pass
 
 
-try:
-    from homeassistant.const import EntityCategory
-except ImportError:
-    # Fallback for environments where EntityCategory is not available (e.g. old tests)
-    class EntityCategory(StrEnum):
-        """Entity category."""
-
-        CONFIG = "config"
-        DIAGNOSTIC = "diagnostic"
-
-
 from .const import PROGRAM_TYPE_FILTRATION
 from .models import IndygoModuleData, IndygoPoolData, IndygoSensorData
 
@@ -325,7 +314,6 @@ class IndygoParser:
                 if idx == 0:
                     pool_data.pool_status["0"] = IndygoSensorData(
                         key="filtration_status",
-                        name="Filtration Status",
                         value=val,
                         extra_attributes={
                             "info": item.get("info"),
@@ -338,9 +326,6 @@ class IndygoParser:
         """Parse root level sensors."""
         root_sensors_map = {
             "temperature": {
-                "name": "Water Temperature",
-                "device_class": "temperature",
-                "unit": "°C",
                 "attributes": {"temperatureTime": "last_measurement_time"},
             },
         }
@@ -356,10 +341,7 @@ class IndygoParser:
 
                 pool_data.sensors[key] = IndygoSensorData(
                     key=key,
-                    name=config["name"],
                     value=json_data[key],
-                    unit=config.get("unit"),
-                    device_class=config.get("device_class"),
                     extra_attributes=extra_attributes,
                 )
 
@@ -377,10 +359,7 @@ class IndygoParser:
                     else:
                         pool_data.sensors["temperature"] = IndygoSensorData(
                             key="temperature",
-                            name="Water Temperature",
                             value=temp_c,
-                            unit="°C",
-                            device_class="temperature",
                         )
 
     def _parse_modules(
@@ -407,10 +386,7 @@ class IndygoParser:
                         indygo_module.sensors["totalElectrolyseDuration"] = (
                             IndygoSensorData(
                                 key="totalElectrolyseDuration",
-                                name="Electrolyse Duration",
                                 value=ipx_data["totalElectrolyseDuration"],
-                                unit="h",
-                                entity_category=EntityCategory.DIAGNOSTIC,
                             )
                         )
 
@@ -460,14 +436,14 @@ class IndygoParser:
             salt = get_nested(outputs, 1, "ipxData", "saltValue")
             if salt is not None:
                 pool_data.sensors["ipx_salt"] = IndygoSensorData(
-                    key="ipx_salt", name="Salt Level (IPX)", value=salt, unit="g/L"
+                    key="ipx_salt", value=salt
                 )
 
             # pH Setpoint
             ph_set = get_nested(outputs, 0, "ipxData", "pHSetpoint")
             if ph_set is not None:
                 pool_data.sensors["ph_setpoint"] = IndygoSensorData(
-                    key="ph_setpoint", name="pH Setpoint", value=ph_set, unit=None
+                    key="ph_setpoint", value=ph_set
                 )
 
             # Production Setpoint
@@ -475,9 +451,7 @@ class IndygoParser:
             if prod_set is not None:
                 pool_data.sensors["production_setpoint"] = IndygoSensorData(
                     key="production_setpoint",
-                    name="Production Setpoint",
                     value=prod_set,
-                    unit="%",
                 )
 
             # Electrolyzer Mode
@@ -485,10 +459,7 @@ class IndygoParser:
             if elec_mode is not None:
                 pool_data.sensors["electrolyzer_mode"] = IndygoSensorData(
                     key="electrolyzer_mode",
-                    name="Electrolyzer Mode",
                     value=elec_mode,
-                    unit=None,
-                    entity_category=EntityCategory.DIAGNOSTIC,
                 )
 
             # pH Latest (from inputs)
@@ -511,9 +482,7 @@ class IndygoParser:
 
                         pool_data.sensors["ph"] = IndygoSensorData(
                             key="ph",
-                            name="pH",
                             value=val,
-                            unit=None,  # pH has no unit
                             extra_attributes=extra_attrs,
                         )
                         break

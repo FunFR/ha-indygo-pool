@@ -11,12 +11,7 @@ class IndygoSensorData:
     """Class representing a single sensor value."""
 
     key: str
-    name: str | None = None
     value: float | str | None = None
-    unit: str | None = None
-    device_class: str | None = None
-    state_class: str | None = None
-    entity_category: str | None = None
     extra_attributes: dict[str, Any] = field(default_factory=dict)
 
 

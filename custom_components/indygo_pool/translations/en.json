@@ -18,5 +18,47 @@
         "abort": {
             "already_configured": "Device is already configured"
         }
+    },
+    "entity": {
+        "sensor": {
+            "filtration_status": {
+                "name": "Filtration status"
+            },
+            "water_temperature": {
+                "name": "Water temperature"
+            },
+            "electrolyzer_duration": {
+                "name": "Electrolyzer duration"
+            },
+            "ipx_salt": {
+                "name": "Salt level (IPX)"
+            },
+            "ph_setpoint": {
+                "name": "pH setpoint"
+            },
+            "production_setpoint": {
+                "name": "Production setpoint"
+            },
+            "electrolyzer_mode": {
+                "name": "Electrolyzer mode"
+            },
+            "ph": {
+                "name": "pH"
+            }
+        },
+        "binary_sensor": {
+            "is_online": {
+                "name": "Online ({module})"
+            },
+            "shutter": {
+                "name": "Shutter"
+            },
+            "flow": {
+                "name": "Flow"
+            },
+            "filtration": {
+                "name": "Filtration"
+            }
+        }
     }
 }
