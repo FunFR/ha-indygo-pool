@@ -14,6 +14,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.util import slugify
 
 from .const import DOMAIN
 from .coordinator import IndygoPoolDataUpdateCoordinator
@@ -33,12 +34,14 @@ BINARY_SENSOR_TYPES: tuple[IndygoBinarySensorEntityDescription, ...] = (
     IndygoBinarySensorEntityDescription(
         key="isOnline",
         translation_key="is_online",
+        name="Online",
         device_class=BinarySensorDeviceClass.CONNECTIVITY,
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     IndygoBinarySensorEntityDescription(
         key="shutterEntry",
         translation_key="shutter",
+        name="Shutter",
         device_class=BinarySensorDeviceClass.WINDOW,
         sub_path="ipxData.deviceState",
         is_inverted=True,
@@ -46,6 +49,7 @@ BINARY_SENSOR_TYPES: tuple[IndygoBinarySensorEntityDescription, ...] = (
     IndygoBinarySensorEntityDescription(
         key="flowEntry",
         translation_key="flow",
+        name="Flow",
         device_class=BinarySensorDeviceClass.PROBLEM,
         sub_path="ipxData.deviceState",
         entity_category=EntityCategory.DIAGNOSTIC,
@@ -53,48 +57,56 @@ BINARY_SENSOR_TYPES: tuple[IndygoBinarySensorEntityDescription, ...] = (
     IndygoBinarySensorEntityDescription(
         key="cmdEntry",
         translation_key="cmd_entry",
+        name="Command",
         sub_path="ipxData.deviceState",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     IndygoBinarySensorEntityDescription(
         key="canPhEntry",
         translation_key="can_ph_entry",
+        name="pH entry",
         sub_path="ipxData.deviceState",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     IndygoBinarySensorEntityDescription(
         key="boostEnabled",
         translation_key="boost_enabled",
+        name="Boost",
         sub_path="ipxData.deviceState",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     IndygoBinarySensorEntityDescription(
         key="testProd",
         translation_key="test_prod",
+        name="Test production",
         sub_path="ipxData.deviceState",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     IndygoBinarySensorEntityDescription(
         key="pHInjection",
         translation_key="ph_injection",
+        name="pH injection",
         sub_path="ipxData.deviceState",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     IndygoBinarySensorEntityDescription(
         key="cellPolaruty",
         translation_key="cell_polarity",
+        name="Cell polarity",
         sub_path="ipxData.deviceState",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     IndygoBinarySensorEntityDescription(
         key="prodStatus",
         translation_key="production_status",
+        name="Production status",
         sub_path="ipxData.deviceState",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     IndygoBinarySensorEntityDescription(
         key="0",
         translation_key="filtration",
+        name="Filtration",
         device_class=BinarySensorDeviceClass.RUNNING,
         is_pool_status=True,
     ),
@@ -195,6 +207,10 @@ class IndygoPoolBinarySensor(IndygoPoolEntity, BinarySensorEntity):
             if module_id
             else f"{self._pool_unique_id}_{description.key}"
         )
+
+        # Force English entity_id
+        suffix = slugify(description.translation_key)
+        self.entity_id = f"binary_sensor.{self.device_name_slug}_{suffix}"
 
     @property
     def is_on(self) -> bool | None:

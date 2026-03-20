@@ -21,6 +21,9 @@
     },
     "entity": {
         "sensor": {
+            "filtration_status": {
+                "name": "Filtration status"
+            },
             "water_temperature": {
                 "name": "Water temperature"
             },
