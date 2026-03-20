@@ -65,15 +65,12 @@ class IndygoPoolSelect(IndygoPoolEntity, SelectEntity):
         module_name: str,
     ) -> None:
         """Initialize."""
-        super().__init__(coordinator)
+        super().__init__(coordinator, module_id)
         self._module_id = module_id
-        pool_id = (
-            coordinator.data.pool_id
-            if coordinator.data and coordinator.data.pool_id
-            else coordinator.config_entry.entry_id
-        )
-        self._attr_unique_id = f"{pool_id}_{module_id}_filtration_mode"
-        self._attr_name = f"{module_name} Filtration Mode"
+        self.translation_key = "filtration_mode"
+
+        # Unique ID: PoolID_ModuleID_filtration_mode
+        self._attr_unique_id = f"{self._pool_unique_id}_{module_id}_filtration_mode"
 
     @property
     def current_option(self) -> str | None:

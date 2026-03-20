@@ -20,14 +20,21 @@ load_dotenv()
 @pytest.mark.integration
 async def _verify_critical_sensors(data: IndygoPoolData):
     """Verify critical sensors like temperature."""
-    assert "temperature" in data.sensors, "Missing water temperature sensor"
-    assert isinstance(data.sensors["temperature"], IndygoSensorData)
-    assert isinstance(data.sensors["temperature"].value, (float, int))
-    print(f"DEBUG: Water Temperature = {data.sensors['temperature'].value} °C")
+    temp_sensor = data.sensors.get("temperature")
+    if not temp_sensor:
+        for m in data.modules.values():
+            if "temperature" in m.sensors:
+                temp_sensor = m.sensors["temperature"]
+                break
+
+    assert temp_sensor, "Missing water temperature sensor"
+    assert isinstance(temp_sensor, IndygoSensorData)
+    assert isinstance(temp_sensor.value, (float, int))
+    print(f"DEBUG: Water Temperature = {temp_sensor.value} °C")
 
     # Check for last_measurement_time attribute
-    if "last_measurement_time" in data.sensors["temperature"].extra_attributes:
-        val = data.sensors["temperature"].extra_attributes["last_measurement_time"]
+    if "last_measurement_time" in temp_sensor.extra_attributes:
+        val = temp_sensor.extra_attributes["last_measurement_time"]
         print(f"DEBUG: Temperature timestamp: {val}")
     else:
         print("WARNING: Temperature sensor missing last_measurement_time")
@@ -35,8 +42,14 @@ async def _verify_critical_sensors(data: IndygoPoolData):
 
 async def _verify_ph_sensor(data: IndygoPoolData):
     """Verify pH sensor and derived attributes."""
-    if "ph" in data.sensors:
-        ph_sensor = data.sensors["ph"]
+    ph_sensor = data.sensors.get("ph")
+    if not ph_sensor:
+        for m in data.modules.values():
+            if "ph" in m.sensors:
+                ph_sensor = m.sensors["ph"]
+                break
+
+    if ph_sensor:
         print(f"DEBUG: pH found: {ph_sensor.value}")
         assert ph_sensor.value is not None
 
@@ -62,8 +75,16 @@ async def _verify_ipx_sensors(data: IndygoPoolData):
     ]
 
     for sensor_key in expected_sensors:
-        if sensor_key in data.sensors:
-            val = data.sensors[sensor_key].value
+        # Search in root and modules
+        sensor = data.sensors.get(sensor_key)
+        if not sensor:
+            for m in data.modules.values():
+                if sensor_key in m.sensors:
+                    sensor = m.sensors[sensor_key]
+                    break
+
+        if sensor:
+            val = sensor.value
             print(f"DEBUG: {sensor_key} found: {val}")
             assert val is not None
         else:

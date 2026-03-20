@@ -38,9 +38,12 @@ class TestIndygoPoolSelect:
         module_name = "Pool Pump"
 
         entity = IndygoPoolSelect(mock_coordinator, module_id, module_name)
+        entity.platform = MagicMock()
+        entity.platform.platform_name = "indygo_pool"
+        entity.platform.domain = "select"
 
+        # Test basic properties that don't depend on translation logic
         assert entity._module_id == module_id
-        assert entity.name == "Pool Pump Filtration Mode"
         assert entity.unique_id == "test_pool_id_mod1_filtration_mode"
         assert entity.options == [MODE_OFF, MODE_ON, MODE_AUTO]
 

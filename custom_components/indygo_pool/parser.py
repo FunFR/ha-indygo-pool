@@ -292,11 +292,15 @@ class IndygoParser:
             pool_id=pool_id, address=pool_address, relay_id=relay_id, raw_data=json_data
         )
 
+        # 1. Modules Data (Parsed first to allow sensors to be attached to them)
+        self._parse_modules(json_data, pool_data, scraped_programs)
+
+        # 2. Scraped IPX Data
+        self._parse_scraped_ipx(json_data, pool_data)
+
+        # 3. Main Pool Data
         self._parse_root_sensors(json_data, pool_data)
         self._parse_sensor_state(json_data, pool_data)
-        self._parse_modules(json_data, pool_data, scraped_programs)
-        # self._parse_modules called twice in original code? Removing duplicate call.
-        self._parse_scraped_ipx(json_data, pool_data)
         self._parse_pool_status_list(json_data, pool_data)
 
         return pool_data
@@ -305,22 +309,33 @@ class IndygoParser:
         self, json_data: dict, pool_data: IndygoPoolData
     ) -> None:
         """Parse 'pool' list which contains status for Filtration, etc."""
-        if "pool" in json_data and isinstance(json_data["pool"], list):
-            for item in json_data["pool"]:
-                idx = item.get("index")
-                val = item.get("value")
+        if "pool" not in json_data or not isinstance(json_data["pool"], list):
+            return
 
-                # Index 0 is Filtration
-                if idx == 0:
-                    pool_data.pool_status["0"] = IndygoSensorData(
-                        key="filtration_status",
-                        value=val,
-                        extra_attributes={
-                            "info": item.get("info"),
-                            "time": item.get("time"),
-                            "tempRef": item.get("tempRef"),
-                        },
-                    )
+        # Find Filtration Module to attach sensors
+        filt_module = next(
+            (m for m in pool_data.modules.values() if m.filtration_program),
+            next((m for m in pool_data.modules.values() if m.type == "lr-pc"), None),
+        )
+        target_status = (
+            filt_module.pool_status if filt_module else pool_data.pool_status
+        )
+
+        for item in json_data["pool"]:
+            idx = item.get("index")
+            val = item.get("value")
+
+            # Index 0 is Filtration
+            if idx == 0:
+                target_status["0"] = IndygoSensorData(
+                    key="filtration_status",
+                    value=val,
+                    extra_attributes={
+                        "info": item.get("info"),
+                        "time": item.get("time"),
+                        "tempRef": item.get("tempRef"),
+                    },
+                )
 
     def _parse_root_sensors(self, json_data: dict, pool_data: IndygoPoolData) -> None:
         """Parse root level sensors."""
@@ -329,6 +344,13 @@ class IndygoParser:
                 "attributes": {"temperatureTime": "last_measurement_time"},
             },
         }
+
+        # Find Filtration Module (Temperature is from LR-PC)
+        filt_module = next(
+            (m for m in pool_data.modules.values() if m.filtration_program),
+            next((m for m in pool_data.modules.values() if m.type == "lr-pc"), None),
+        )
+        target_sensors = filt_module.sensors if filt_module else pool_data.sensors
 
         for key, config in root_sensors_map.items():
             if key in json_data and json_data[key] is not None:
@@ -339,7 +361,7 @@ class IndygoParser:
                     if source_key in json_data:
                         extra_attributes[target_key] = json_data[source_key]
 
-                pool_data.sensors[key] = IndygoSensorData(
+                target_sensors[key] = IndygoSensorData(
                     key=key,
                     value=json_data[key],
                     extra_attributes=extra_attributes,
@@ -347,20 +369,31 @@ class IndygoParser:
 
     def _parse_sensor_state(self, json_data: dict, pool_data: IndygoPoolData) -> None:
         """Parse sensorState (legacy/generic list)."""
-        if "sensorState" in json_data and isinstance(json_data["sensorState"], list):
-            for sensor_item in json_data["sensorState"]:
-                idx = sensor_item.get("index")
-                val = sensor_item.get("value")
-                if idx == 0 and val is not None:
-                    # Index 0 is water temperature in 1/100th of degree
-                    temp_c = val / 100.0
-                    if "temperature" in pool_data.sensors:
-                        pool_data.sensors["temperature"].value = temp_c
-                    else:
-                        pool_data.sensors["temperature"] = IndygoSensorData(
-                            key="temperature",
-                            value=temp_c,
-                        )
+        if "sensorState" not in json_data or not isinstance(
+            json_data["sensorState"], list
+        ):
+            return
+
+        # Find Filtration Module (Temperature is from LR-PC)
+        filt_module = next(
+            (m for m in pool_data.modules.values() if m.filtration_program),
+            next((m for m in pool_data.modules.values() if m.type == "lr-pc"), None),
+        )
+        target_sensors = filt_module.sensors if filt_module else pool_data.sensors
+
+        for sensor_item in json_data["sensorState"]:
+            idx = sensor_item.get("index")
+            val = sensor_item.get("value")
+            if idx == 0 and val is not None:
+                # Index 0 is water temperature in 1/100th of degree
+                temp_c = val / 100.0
+                if "temperature" in target_sensors:
+                    target_sensors["temperature"].value = temp_c
+                else:
+                    target_sensors["temperature"] = IndygoSensorData(
+                        key="temperature",
+                        value=temp_c,
+                    )
 
     def _parse_modules(
         self,
@@ -414,73 +447,76 @@ class IndygoParser:
 
     def _parse_scraped_ipx(self, json_data: dict, pool_data: IndygoPoolData) -> None:
         """Parse scraped ipx_module data."""
-        if "ipx_module" in json_data:
-            ipx_mod = json_data["ipx_module"]
-            outputs = ipx_mod.get("outputs", [])
+        if "ipx_module" not in json_data:
+            return
 
-            # Helper to safely get nested
-            def get_nested(obj, *keys):
-                for k in keys:
-                    if not isinstance(obj, (dict, list)):
+        ipx_mod = json_data["ipx_module"]
+        outputs = ipx_mod.get("outputs", [])
+
+        # Find IPX module to attach sensors
+        ipx_module = next(
+            (m for m in pool_data.modules.values() if m.type == "ipx"), None
+        )
+        # Fallback to root sensors if no module found
+        target_sensors = ipx_module.sensors if ipx_module else pool_data.sensors
+
+        # Helper to safely get nested
+        def get_nested(obj, *keys):
+            for k in keys:
+                if not isinstance(obj, (dict, list)):
+                    return None
+                if isinstance(obj, list):
+                    try:
+                        obj = obj[int(k)]
+                    except (IndexError, ValueError):
                         return None
-                    if isinstance(obj, list):
-                        try:
-                            obj = obj[int(k)]
-                        except (IndexError, ValueError):
-                            return None
-                    else:
-                        obj = obj.get(k)
-                return obj
+                else:
+                    obj = obj.get(k)
+            return obj
 
-            # Salt
-            salt = get_nested(outputs, 1, "ipxData", "saltValue")
-            if salt is not None:
-                pool_data.sensors["ipx_salt"] = IndygoSensorData(
-                    key="ipx_salt", value=salt
-                )
+        # Salt
+        salt = get_nested(outputs, 1, "ipxData", "saltValue")
+        if salt is not None:
+            target_sensors["ipx_salt"] = IndygoSensorData(key="ipx_salt", value=salt)
 
-            # pH Setpoint
-            ph_set = get_nested(outputs, 0, "ipxData", "pHSetpoint")
-            if ph_set is not None:
-                pool_data.sensors["ph_setpoint"] = IndygoSensorData(
-                    key="ph_setpoint", value=ph_set
-                )
+        # pH Setpoint
+        ph_set = get_nested(outputs, 0, "ipxData", "pHSetpoint")
+        if ph_set is not None:
+            target_sensors["ph_setpoint"] = IndygoSensorData(
+                key="ph_setpoint", value=ph_set
+            )
 
-            # Production Setpoint
-            prod_set = get_nested(outputs, 1, "ipxData", "percentageSetpoint")
-            if prod_set is not None:
-                pool_data.sensors["production_setpoint"] = IndygoSensorData(
-                    key="production_setpoint",
-                    value=prod_set,
-                )
+        # Production Setpoint
+        prod_set = get_nested(outputs, 1, "ipxData", "percentageSetpoint")
+        if prod_set is not None:
+            target_sensors["production_setpoint"] = IndygoSensorData(
+                key="production_setpoint",
+                value=prod_set,
+            )
 
-            # Electrolyzer Mode
-            elec_mode = get_nested(outputs, 1, "ipxData", "electrolyzerMode")
-            if elec_mode is not None:
-                pool_data.sensors["electrolyzer_mode"] = IndygoSensorData(
-                    key="electrolyzer_mode",
-                    value=elec_mode,
-                )
+        # Electrolyzer Mode
+        elec_mode = get_nested(outputs, 1, "ipxData", "electrolyzerMode")
+        if elec_mode is not None:
+            target_sensors["electrolyzer_mode"] = IndygoSensorData(
+                key="electrolyzer_mode",
+                value=elec_mode,
+            )
 
-            # pH Latest (from inputs)
-            inputs = ipx_mod.get("inputs", [])
-            if isinstance(inputs, list):
-                for inp in inputs:
-                    last_val = inp.get("lastValue")
-                    if (
-                        last_val
-                        and "value" in last_val
-                        and last_val["value"] is not None
-                    ):
-                        if inp.get("type") == IPX_PH_SENSOR_TYPE:
-                            val = last_val["value"]
+        # pH Latest (from inputs)
+        inputs = ipx_mod.get("inputs", [])
+        if isinstance(inputs, list):
+            for inp in inputs:
+                last_val = inp.get("lastValue")
+                if last_val and "value" in last_val and last_val["value"] is not None:
+                    if inp.get("type") == IPX_PH_SENSOR_TYPE:
+                        val = last_val["value"]
                         date_str = last_val.get("date")
 
                         extra_attrs = {}
                         if date_str:
                             extra_attrs["last_measurement_time"] = date_str
 
-                        pool_data.sensors["ph"] = IndygoSensorData(
+                        target_sensors["ph"] = IndygoSensorData(
                             key="ph",
                             value=val,
                             extra_attributes=extra_attrs,

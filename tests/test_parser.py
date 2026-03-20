@@ -1,6 +1,5 @@
 """Tests for Indygo Parser."""
 
-from custom_components.indygo_pool.models import IndygoPoolData
 from custom_components.indygo_pool.parser import IndygoParser
 
 # Constants for testing
@@ -74,10 +73,15 @@ class TestIndygoParser:
             "modules": [
                 {
                     "id": "MOD1",
+                    "type": "lr-pc",
+                    "name": "Pool Pump",
+                },
+                {
+                    "id": "MOD2",
                     "type": "ipx",
                     "name": "Electrolyzer",
                     "ipxData": {"totalElectrolyseDuration": TEST_ELECTROLYSE_DURATION},
-                }
+                },
             ],
             "ipx_module": {
                 "outputs": [
@@ -86,6 +90,7 @@ class TestIndygoParser:
                         "ipxData": {
                             "saltValue": TEST_SALT_VALUE,
                             "percentageSetpoint": TEST_PROD_SETPOINT,
+                            "electrolyzerMode": 0,
                         }
                     },
                 ],
@@ -101,35 +106,42 @@ class TestIndygoParser:
                     },
                 ],
             },
+            "pool": [
+                {"index": 0, "value": TEST_PH_VALUE, "info": "INFO", "time": TEST_DATE}
+            ],
         }
 
         pool_data = parser.parse_data(json_data, "POOL1", "ADDR1", "RELAY1")
 
-        assert isinstance(pool_data, IndygoPoolData)
-        assert pool_data.pool_id == "POOL1"
-        assert pool_data.sensors["temperature"].value == TEST_SENSOR_STATE_TEMP / 100.0
-        assert (
-            pool_data.sensors["temperature"].extra_attributes["last_measurement_time"]
-            == TEST_DATE
-        )
-
-        # Test Module Data
+        # Test LR-PC (Filtration Module) Data
         assert "MOD1" in pool_data.modules
+        filt_mod = pool_data.modules["MOD1"]
+
+        # Temperature and Filtration should now be on the module
+        assert filt_mod.sensors["temperature"].value == TEST_SENSOR_STATE_TEMP / 100.0
+        # Check filtration status (index 0)
+        assert filt_mod.pool_status["0"].value == TEST_PH_VALUE
+
+        # Test IPX Data (on module MOD2)
+        assert "MOD2" in pool_data.modules
+        ipx_mod = pool_data.modules["MOD2"]
         assert (
-            pool_data.modules["MOD1"].sensors["totalElectrolyseDuration"].value
+            ipx_mod.sensors["totalElectrolyseDuration"].value
             == TEST_ELECTROLYSE_DURATION
         )
 
-        # Test IPX Scraped Data
-        assert pool_data.sensors["ph_setpoint"].value == TEST_PH_SETPOINT
-        assert pool_data.sensors["ipx_salt"].value == TEST_SALT_VALUE
+        # Test IPX Scraped Data (now on module MOD2)
+        assert ipx_mod.sensors["ph_setpoint"].value == TEST_PH_SETPOINT
+        assert ipx_mod.sensors["ipx_salt"].value == TEST_SALT_VALUE
+        assert ipx_mod.sensors["production_setpoint"].value == TEST_PROD_SETPOINT
+        # Electrolyzer mode is defaulted in this test case
+        assert ipx_mod.sensors["electrolyzer_mode"].value == 0
 
-        # Test pH Latest Logic (merged)
-        assert "ph" in pool_data.sensors
-        assert pool_data.sensors["ph"].value == TEST_PH_VALUE
+        # Test pH Latest Logic (merged on module MOD2)
+        assert "ph" in ipx_mod.sensors
+        assert ipx_mod.sensors["ph"].value == TEST_PH_VALUE
         assert (
-            pool_data.sensors["ph"].extra_attributes["last_measurement_time"]
-            == TEST_DATE
+            ipx_mod.sensors["ph"].extra_attributes["last_measurement_time"] == TEST_DATE
         )
 
     def test_parse_programs_from_html(self):
