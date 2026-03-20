@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import slugify
 
 from .const import DOMAIN, NAME, VERSION
 from .coordinator import IndygoPoolDataUpdateCoordinator
@@ -47,3 +48,10 @@ class IndygoPoolEntity(CoordinatorEntity[IndygoPoolDataUpdateCoordinator]):
                 model=VERSION,
                 manufacturer=NAME,
             )
+
+    @property
+    def device_name_slug(self) -> str:
+        """Return the device name slug."""
+        if hasattr(self, "_attr_device_info") and self._attr_device_info:
+            return slugify(self._attr_device_info["name"])
+        return slugify(f"{NAME} {self._pool_unique_id[:8]}")

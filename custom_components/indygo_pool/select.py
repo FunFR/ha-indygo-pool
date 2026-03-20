@@ -67,10 +67,14 @@ class IndygoPoolSelect(IndygoPoolEntity, SelectEntity):
         """Initialize."""
         super().__init__(coordinator, module_id)
         self._module_id = module_id
-        self.translation_key = "filtration_mode"
+        self._attr_name = "Filtration mode"
+        self._attr_translation_key = "filtration_mode"
 
         # Unique ID: PoolID_ModuleID_filtration_mode
         self._attr_unique_id = f"{self._pool_unique_id}_{module_id}_filtration_mode"
+
+        # Force English entity_id
+        self.entity_id = f"select.{self.device_name_slug}_filtration_mode"
 
     @property
     def current_option(self) -> str | None:
