@@ -98,12 +98,24 @@ async def async_setup_entry(
 
     # 2. Module Sensors
     for module_id, module in coordinator.data.modules.items():
-        for key, _ in module.sensors.items():
+        # Regular sensors
+        for key in module.sensors:
             if key in desc_map:
                 entities.append(
                     IndygoPoolSensor(
                         coordinator=coordinator,
                         description=desc_map[key],
+                        module_id=module_id,
+                    )
+                )
+
+        # Module-level status sensors (other than filtration_status)
+        for index in module.pool_status:
+            if index != "0" and index in desc_map:
+                entities.append(
+                    IndygoPoolSensor(
+                        coordinator=coordinator,
+                        description=desc_map[index],
                         module_id=module_id,
                     )
                 )
@@ -123,21 +135,17 @@ class IndygoPoolSensor(IndygoPoolEntity, SensorEntity):
         module_id: str | None = None,
     ) -> None:
         """Initialize."""
-        super().__init__(coordinator)
+        super().__init__(coordinator, module_id)
         self.entity_description = description
         self._sensor_key = description.key
         self._module_id = module_id
 
-        pool_id = (
-            coordinator.data.pool_id
-            if coordinator.data and coordinator.data.pool_id
-            else coordinator.config_entry.entry_id
+        # Unique ID: PoolID_ModuleID_Key
+        self._attr_unique_id = (
+            f"{self._pool_unique_id}_{module_id}_{self._sensor_key}"
+            if module_id
+            else f"{self._pool_unique_id}_{self._sensor_key}"
         )
-
-        if module_id:
-            self._attr_unique_id = f"{pool_id}_{module_id}_{self._sensor_key}"
-        else:
-            self._attr_unique_id = f"{pool_id}_{self._sensor_key}"
 
     @property
     def native_value(self) -> float | str | None:
@@ -146,12 +154,12 @@ class IndygoPoolSensor(IndygoPoolEntity, SensorEntity):
         if not data:
             return None
 
-        if self._module_id:
-            if self._module_id in data.modules:
-                module = data.modules[self._module_id]
-                if self._sensor_key in module.sensors:
-                    return module.sensors[self._sensor_key].value
-        elif self._sensor_key in data.sensors:
+        if self._module_id and self._module_id in data.modules:
+            module = data.modules[self._module_id]
+            if self._sensor_key in module.sensors:
+                return module.sensors[self._sensor_key].value
+
+        if self._sensor_key in data.sensors:
             return data.sensors[self._sensor_key].value
 
         return None

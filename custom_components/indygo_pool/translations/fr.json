@@ -21,26 +21,23 @@
     },
     "entity": {
         "sensor": {
-            "filtration_status": {
-                "name": "Filtration status"
-            },
             "water_temperature": {
-                "name": "Water temperature"
+                "name": "Température de l'eau"
             },
             "electrolyzer_duration": {
-                "name": "Electrolyzer duration"
+                "name": "Durée électrolyseur"
             },
             "ipx_salt": {
-                "name": "Salt level (IPX)"
+                "name": "Niveau de sel"
             },
             "ph_setpoint": {
-                "name": "pH setpoint"
+                "name": "Consigne pH"
             },
             "production_setpoint": {
-                "name": "Production setpoint"
+                "name": "Consigne production"
             },
             "electrolyzer_mode": {
-                "name": "Electrolyzer mode"
+                "name": "Mode électrolyseur"
             },
             "ph": {
                 "name": "pH"
@@ -48,16 +45,42 @@
         },
         "binary_sensor": {
             "is_online": {
-                "name": "Online ({module})"
+                "name": "En ligne"
             },
             "shutter": {
-                "name": "Shutter"
+                "name": "Volet"
             },
             "flow": {
-                "name": "Flow"
+                "name": "Flux"
+            },
+            "cmd_entry": {
+                "name": "Commande"
+            },
+            "can_ph_entry": {
+                "name": "Entrée pH"
+            },
+            "boost_enabled": {
+                "name": "Boost"
+            },
+            "test_prod": {
+                "name": "Test production"
+            },
+            "ph_injection": {
+                "name": "Injection pH"
+            },
+            "cell_polarity": {
+                "name": "Polarité cellule"
+            },
+            "production_status": {
+                "name": "Statut production"
             },
             "filtration": {
                 "name": "Filtration"
+            }
+        },
+        "select": {
+            "filtration_mode": {
+                "name": "Mode filtration"
             }
         }
     }

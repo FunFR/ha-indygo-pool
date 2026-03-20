@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -50,6 +51,48 @@ BINARY_SENSOR_TYPES: tuple[IndygoBinarySensorEntityDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     IndygoBinarySensorEntityDescription(
+        key="cmdEntry",
+        translation_key="cmd_entry",
+        sub_path="ipxData.deviceState",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    IndygoBinarySensorEntityDescription(
+        key="canPhEntry",
+        translation_key="can_ph_entry",
+        sub_path="ipxData.deviceState",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    IndygoBinarySensorEntityDescription(
+        key="boostEnabled",
+        translation_key="boost_enabled",
+        sub_path="ipxData.deviceState",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    IndygoBinarySensorEntityDescription(
+        key="testProd",
+        translation_key="test_prod",
+        sub_path="ipxData.deviceState",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    IndygoBinarySensorEntityDescription(
+        key="pHInjection",
+        translation_key="ph_injection",
+        sub_path="ipxData.deviceState",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    IndygoBinarySensorEntityDescription(
+        key="cellPolaruty",
+        translation_key="cell_polarity",
+        sub_path="ipxData.deviceState",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    IndygoBinarySensorEntityDescription(
+        key="prodStatus",
+        translation_key="production_status",
+        sub_path="ipxData.deviceState",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    IndygoBinarySensorEntityDescription(
         key="0",
         translation_key="filtration",
         device_class=BinarySensorDeviceClass.RUNNING,
@@ -88,32 +131,38 @@ async def async_setup_entry(
         if module.type == "ipx" and "ipxData" in module.raw_data:
             ipx_data = module.raw_data["ipxData"]
             if "deviceState" in ipx_data:
-                if "shutterEntry" in ipx_data["deviceState"]:
-                    entities.append(
-                        IndygoPoolBinarySensor(
-                            coordinator=coordinator,
-                            description=desc_map["shutterEntry"],
-                            module_id=module_id,
+                device_state = ipx_data["deviceState"]
+                for key in device_state:
+                    if (
+                        key in desc_map
+                        and desc_map[key].sub_path == "ipxData.deviceState"
+                    ):
+                        entities.append(
+                            IndygoPoolBinarySensor(
+                                coordinator=coordinator,
+                                description=desc_map[key],
+                                module_id=module_id,
+                            )
                         )
-                    )
 
-                if "flowEntry" in ipx_data["deviceState"]:
-                    entities.append(
-                        IndygoPoolBinarySensor(
-                            coordinator=coordinator,
-                            description=desc_map["flowEntry"],
-                            module_id=module_id,
-                        )
+        # Module-level status sensors (Filtration, etc)
+        for index in module.pool_status:
+            if index == "0":
+                entities.append(
+                    IndygoPoolBinarySensor(
+                        coordinator=coordinator,
+                        description=desc_map["0"],
+                        module_id=module_id,
                     )
+                )
 
-    # Pool Status Sensors (Filtration, etc)
-    for index, _ in coordinator.data.pool_status.items():
+    # Root Level Pool Status Sensors (Fallback if not moved to module)
+    for index in coordinator.data.pool_status:
         if index == "0":
             entities.append(
                 IndygoPoolBinarySensor(
                     coordinator=coordinator,
                     description=desc_map["0"],
-                    module_id="pool_status",
                 )
             )
 
@@ -129,24 +178,23 @@ class IndygoPoolBinarySensor(IndygoPoolEntity, BinarySensorEntity):
         self,
         coordinator: IndygoPoolDataUpdateCoordinator,
         description: IndygoBinarySensorEntityDescription,
-        module_id: str,
+        module_id: str | None = None,
         module_name: str | None = None,
     ) -> None:
         """Initialize."""
-        super().__init__(coordinator)
+        super().__init__(coordinator, module_id)
         self.entity_description = description
         self._module_id = module_id
 
         if description.key == "isOnline" and module_name:
             self._attr_translation_placeholders = {"module": module_name}
 
-        # Unique ID: ModuleID_Key
-        pool_id = (
-            coordinator.data.pool_id
-            if coordinator.data and coordinator.data.pool_id
-            else coordinator.config_entry.entry_id
+        # Unique ID: PoolID_ModuleID_Key
+        self._attr_unique_id = (
+            f"{self._pool_unique_id}_{module_id}_{description.key}"
+            if module_id
+            else f"{self._pool_unique_id}_{description.key}"
         )
-        self._attr_unique_id = f"{pool_id}_{module_id}_{description.key}"
 
     @property
     def is_on(self) -> bool | None:
@@ -154,8 +202,14 @@ class IndygoPoolBinarySensor(IndygoPoolEntity, BinarySensorEntity):
         desc = self.entity_description
 
         if desc.is_pool_status:
-            if desc.key in self.coordinator.data.pool_status:
-                data = self.coordinator.data.pool_status[desc.key]
+            target_status = self.coordinator.data.pool_status
+            if self._module_id and self._module_id in self.coordinator.data.modules:
+                target_status = self.coordinator.data.modules[
+                    self._module_id
+                ].pool_status
+
+            if desc.key in target_status:
+                data = target_status[desc.key]
                 val = data.value
                 if val is not None:
                     try:
@@ -184,4 +238,19 @@ class IndygoPoolBinarySensor(IndygoPoolEntity, BinarySensorEntity):
                 except (ValueError, TypeError):
                     pass
 
+        return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return the state attributes."""
+        desc = self.entity_description
+        if desc.is_pool_status:
+            target_status = self.coordinator.data.pool_status
+            if self._module_id and self._module_id in self.coordinator.data.modules:
+                target_status = self.coordinator.data.modules[
+                    self._module_id
+                ].pool_status
+
+            if desc.key in target_status:
+                return target_status[desc.key].extra_attributes
         return None

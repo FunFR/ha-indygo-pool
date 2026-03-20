@@ -21,9 +21,6 @@
     },
     "entity": {
         "sensor": {
-            "filtration_status": {
-                "name": "Filtration status"
-            },
             "water_temperature": {
                 "name": "Water temperature"
             },
@@ -31,7 +28,7 @@
                 "name": "Electrolyzer duration"
             },
             "ipx_salt": {
-                "name": "Salt level (IPX)"
+                "name": "Salt level"
             },
             "ph_setpoint": {
                 "name": "pH setpoint"
@@ -48,7 +45,7 @@
         },
         "binary_sensor": {
             "is_online": {
-                "name": "Online ({module})"
+                "name": "Online"
             },
             "shutter": {
                 "name": "Shutter"
@@ -56,8 +53,34 @@
             "flow": {
                 "name": "Flow"
             },
+            "cmd_entry": {
+                "name": "Command"
+            },
+            "can_ph_entry": {
+                "name": "pH Entry"
+            },
+            "boost_enabled": {
+                "name": "Boost"
+            },
+            "test_prod": {
+                "name": "Test Production"
+            },
+            "ph_injection": {
+                "name": "pH Injection"
+            },
+            "cell_polarity": {
+                "name": "Cell Polarity"
+            },
+            "production_status": {
+                "name": "Production Status"
+            },
             "filtration": {
                 "name": "Filtration"
+            }
+        },
+        "select": {
+            "filtration_mode": {
+                "name": "Filtration mode"
             }
         }
     }
