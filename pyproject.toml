@@ -56,6 +56,7 @@ version_variables = [
     "custom_components/indygo_pool/const.py:VERSION",
 ]
 branch = "main"
+strict = true
 build_command = "pip install uv build && uv lock && git add uv.lock && python -m build && python scripts/zip_release.py"
 
 [tool.semantic_release.publish]
