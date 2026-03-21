@@ -2,36 +2,25 @@
 
 This document outlines how to set up your development environment and contribute to the **Indygo Pool** integration.
 
+For project architecture, design philosophy, and AI agent instructions, please refer to [AGENTS.md](AGENTS.md).
+For features and installation instructions, see [README.md](README.md).
+
 ## Contribution guidelines
 
-Contributing to this project should be as easy and transparent as possible, whether it's:
-
-- Reporting a bug
-- Discussing the current state of the code
-- Submitting a fix
-- Proposing new features
-
-### Github is used for everything
-
-Github is used to host code, to track issues and feature requests, as well as accept pull requests.
-
-Pull requests are the best way to propose changes to the codebase.
+Contributing to this project should be as easy and transparent as possible, whether it's reporting a bug, discussing code, or submitting a pull request. Github is used for everything.
 
 1. Fork the repo and create your branch from `main`.
 2. If you've changed something, update the documentation.
-3. Make sure your code lints (using pre-commit).
-4. Test your contribution.
-5. Issue that pull request!
+3. Make sure your code passes tests and lints.
+4. Issue that pull request!
 
-## 🛠️ Development Environment
+## 🛠️ Technology Stack & Environment
 
-### Prerequisites
-
-- [Python 3.9+](https://www.python.org/downloads/)
-- [uv](https://docs.astral.sh/uv/getting-started/installation/)
-- [Git](https://git-scm.com/)
-- [Docker](https://www.docker.com/)
-- [Docker Compose](https://docs.docker.com/compose/)
+- **Language**: Python 3.12+ (Type Hinting is MANDATORY)
+- **Dependency Management**: [uv](https://docs.astral.sh/uv/)
+- **Linting & Formatting**: `ruff`
+- **Testing**: `pytest`
+- **Containerization**: Docker & Docker Compose
 
 ### Getting Started
 
@@ -51,85 +40,53 @@ Pull requests are the best way to propose changes to the codebase.
    uv run pre-commit install
    ```
 
+## ✅ Quality Assurance Checklist
+
+Before telling the user you are done or submitting a PR, YOU MUST ensure:
+
+- [ ] **Tests Pass**: `uv run pytest tests`
+- [ ] **Linting is Clean**: `uv run ruff check .`
+- [ ] **Code is Formatted**: `uv run ruff format .`
+- [ ] **Types are Checked**: Ensure no obvious type errors (Python is dynamically typed but use hints).
+
 ## 🧪 Testing
 
 ### Automated Tests
-
-We use `pytest` for testing. Run tests with:
-
+Run tests with:
 ```bash
 uv run pytest tests
 ```
 
 ### Integration Testing (Real Credentials)
-
 To run tests against the real MyIndygo API, create a `.env` file in the root directory:
-
 ```env
 email=your_email@example.com
 password=your_password
 pool_id=your_pool_id
 ```
-
 Then run the integration tests using:
-
 ```bash
 uv run pytest -s -m integration tests
 ```
 
 ### Manual Config Testing (Docker)
-
-To test the integration in a local Home Assistant environment using Docker:
-
-1. Start the Home Assistant container:
-   ```bash
-   docker compose up -d
-   ```
-
+1. Start the Home Assistant container: `docker compose up -d`
 2. Access Home Assistant at [http://localhost:8123](http://localhost:8123).
+3. View logs: `docker compose logs -f`
+4. Stop container: `docker compose down`
 
-3. To view logs:
-   ```bash
-   docker compose logs -f
-   ```
-
-4. To stop the container:
-   ```bash
-   docker compose down
-   ```
-
-The `docker-compose.yml` file is already configured to map the `custom_components/indygo_pool` directory into the container, so any code changes you make will be reflected after a restart.
+The `docker-compose.yml` file maps the `custom_components/indygo_pool` directory into the container. Restart HA to reflect code changes.
 
 ### Remote Deployment (Real HAOS)
-
-To quickly deploy your local changes to a remote Home Assistant instance (e.g., HAOS on a VM/Pi) without committing to Git:
-
+To quickly deploy local changes to a remote Home Assistant instance without Git:
 ```bash
 scp -r custom_components/indygo_pool root@<HA_IP>:/config/custom_components/
 ```
+> **Note**: Requires the **SSH & Web Terminal** add-on in Home Assistant. Restart HA to apply changes.
 
-> **Note**: This requires the **SSH & Web Terminal** add-on in Home Assistant.
-
-After copying, **restart Home Assistant** to apply changes.
-
-## ✨ Code Quality
-
-We use `ruff` for linting and formatting.
+## ✨ Code Quality Fixes
 
 - **Check**: `uv run ruff check .`
 - **Fix**: `uv run ruff check --fix .`
 - **Format**: `uv run ruff format .`
-
-### Pre-commit
-
-We use `pre-commit` to ensure code quality before every commit.
-
-1. **Install hooks**:
-   ```bash
-   uv run pre-commit install
-   ```
-
-2. **Run manually**:
-   ```bash
-   uv run pre-commit run --all-files
-   ```
+- **Pre-commit**: `uv run pre-commit run --all-files`
