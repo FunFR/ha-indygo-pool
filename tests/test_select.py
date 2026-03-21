@@ -3,6 +3,8 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from custom_components.indygo_pool.models import IndygoModuleData, IndygoPoolData
@@ -11,6 +13,7 @@ from custom_components.indygo_pool.select import (
     MODE_OFF,
     MODE_ON,
     IndygoPoolSelect,
+    async_setup_entry,
 )
 
 
@@ -126,7 +129,82 @@ class TestIndygoPoolSelect:
     async def test_select_option_invalid(self, mock_coordinator):
         """Test selecting an invalid option."""
         entity = IndygoPoolSelect(mock_coordinator, "mod1", "Pump")
+        mock_coordinator.data.modules = {
+            "mod1": IndygoModuleData(
+                id="mod1",
+                type="lr-pc",
+                name="Pump",
+                filtration_program={"programCharacteristics": {"mode": 0}},
+            )
+        }
 
         await entity.async_select_option("InvalidMode")
 
         mock_coordinator.client.async_set_filtration_mode.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_select_option_missing_module(self, mock_coordinator):
+        """Test missing module in select option."""
+        entity = IndygoPoolSelect(mock_coordinator, "mod1", "Pump")
+        mock_coordinator.data.modules = {}
+
+        await entity.async_select_option(MODE_AUTO)
+        mock_coordinator.client.async_set_filtration_mode.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_select_option_no_filtration(self, mock_coordinator):
+        """Test missing filtration program in select option."""
+        entity = IndygoPoolSelect(mock_coordinator, "mod1", "Pump")
+        mock_coordinator.data.modules = {
+            "mod1": IndygoModuleData(
+                id="mod1", type="lr-pc", name="Pump", filtration_program=None
+            )
+        }
+
+        await entity.async_select_option(MODE_AUTO)
+        mock_coordinator.client.async_set_filtration_mode.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_async_setup_entry_with_data(self, mock_coordinator):
+        """Test setting up the select platform with data."""
+        hass = MagicMock(spec=HomeAssistant)
+        entry = MagicMock(spec=ConfigEntry)
+        entry.entry_id = "test_entry_id"
+        hass.data = {"indygo_pool": {"test_entry_id": mock_coordinator}}
+
+        mock_coordinator.data.modules = {
+            "mod1": IndygoModuleData(
+                id="mod1",
+                type="lr-pc",
+                name="Pump",
+                filtration_program={"id": "prog1"},
+            ),
+            "mod2": IndygoModuleData(
+                id="mod2", type="ipx", name="Electrolyzer", filtration_program=None
+            ),
+        }
+
+        async_add_entities = MagicMock()
+
+        await async_setup_entry(hass, entry, async_add_entities)
+
+        # Should only add 1 entity (for mod1 which has a filtration program)
+        async_add_entities.assert_called_once()
+        entities = async_add_entities.call_args[0][0]
+        assert len(entities) == 1
+        assert entities[0]._module_id == "mod1"
+
+    @pytest.mark.asyncio
+    async def test_async_setup_entry_no_data(self, mock_coordinator):
+        """Test setting up the select platform when coordinator has no data."""
+        hass = MagicMock(spec=HomeAssistant)
+        entry = MagicMock(spec=ConfigEntry)
+        entry.entry_id = "test_entry_id"
+        hass.data = {"indygo_pool": {"test_entry_id": mock_coordinator}}
+
+        mock_coordinator.data = None
+        async_add_entities = MagicMock()
+
+        await async_setup_entry(hass, entry, async_add_entities)
+
+        async_add_entities.assert_not_called()

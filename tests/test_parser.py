@@ -188,3 +188,104 @@ class TestIndygoParser:
         html = "<html><body>No programs here</body></html>"
         programs_map = parser.parse_programs_from_html(html)
         assert programs_map == {}
+
+    def test_extract_json_object_edge_cases(self):
+        """Test JSON object extraction edge cases."""
+        parser = IndygoParser()
+        assert parser.extract_json_object("no braces here", 0) is None
+        assert parser.extract_json_object("{unclosed object", 0) is None
+
+    def test_parse_lr_pc_module_edge_cases(self):
+        """Test LR-PC parsing edge cases."""
+        parser = IndygoParser()
+        # No lr-pc
+        a, b, c = parser._parse_lr_pc_module([{"type": "other"}])
+        assert a is None
+
+        # lr-pc acts as gateway
+        a, b, c = parser._parse_lr_pc_module(
+            [{"type": "lr-pc", "serialNumber": "123456"}]
+        )
+        assert a == "123456"
+
+    def test_parse_ipx_module_direct(self):
+        """Test IPX module direct parsing."""
+        parser = IndygoParser()
+        assert parser._parse_ipx_module([{"type": "other"}]) == (None, None, None)
+        a, b, c = parser._parse_ipx_module(
+            [{"type": "ipx", "serialNumber": "ser123", "ipxRelay": "rel456"}]
+        )
+        assert a == "ser123"
+        assert b == "rel456"
+        assert c == "rel456"
+
+    def test_parse_pool_ids_fallbacks(self):
+        """Test pool IDs HTML parsing fallbacks."""
+        parser = IndygoParser()
+        # JSON Decode error on currentPool returns empty
+        html = "<script>var currentPool = {bad json;</script>"
+        assert parser.parse_pool_ids(html, "123") == (None, None, None, {})
+
+        # modulesInPool fallback
+        html = (
+            '<script>var modulesInPool = [{"type": "ipx", '
+            '"serialNumber": "X", "ipxRelay": "Y"}];</script>'
+        )
+        a, b, c, m = parser.parse_pool_ids(html, "123")
+        assert a == "X"
+        assert b == "Y"
+        assert m == {"modules": [{"type": "ipx", "serialNumber": "X", "ipxRelay": "Y"}]}
+
+        # No compatible module
+        html = '<script>var currentPool = {"modules": []};</script>'
+        assert parser.parse_pool_ids(html, "123") == (None, None, None, {})
+
+    def test_parse_ipx_module_html(self):
+        """Test IPX module HTML embedded JSON parsing."""
+        parser = IndygoParser()
+        # Validate poolTechModulesIpx
+        html = '<script>var poolTechModulesIpx = [{"type": "ipx_1"}];</script>'
+        assert parser.parse_ipx_module(html) == {"type": "ipx_1"}
+
+        # Validate legacy ipxModule
+        html = '<script>var ipxModule = {"id": 1};</script>'
+        assert parser.parse_ipx_module(html) == {"id": 1}
+
+        # Validate modulesInPool fallback for ipx
+        html = '<script>var modulesInPool = [{"type": "ipx_foo"}];</script>'
+        assert parser.parse_ipx_module(html) == {"type": "ipx_foo"}
+
+    def test_parse_programs_from_html_fallbacks(self):
+        """Test programs parsing fallbacks."""
+        parser = IndygoParser()
+        # poolCommand json error
+        html = "<script>var poolCommand = {bad;</script>"
+        assert parser.parse_programs_from_html(html) == {}
+
+        # modulesInPool valid programs
+        html = (
+            '<script>var modulesInPool = [{"id": "MOD1", '
+            '"programs": [{"id": 1}]}];</script>'
+        )
+        progs = parser.parse_programs_from_html(html)
+        assert progs["MOD1"] == [{"id": 1}]
+
+    def test_parse_data_edge_cases(self):
+        """Test full data parsing edge cases."""
+        parser = IndygoParser()
+        # Test when no modules, no pool status, no sensorState, etc.
+        data = parser.parse_data({}, "POOL1", "ADDR1", "RELAY1")
+        assert len(data.modules) == 0
+
+        # Test new temperature creation without existing modules
+        data = parser.parse_data(
+            {"sensorState": [{"index": 0, "value": 1500}]}, "POOL1", "ADDR1", "RELAY1"
+        )
+        expected_temperature = 15.0
+        assert data.sensors["temperature"].value == expected_temperature
+
+        # Test get_nested error handling without crashing
+        data = parser.parse_data(
+            {"ipx_module": {"outputs": [{"ipxData": {}}]}}, "POOL1", "ADDR1", "RELAY1"
+        )
+        assert "ipx_salt" not in data.sensors
