@@ -27,6 +27,7 @@ def mock_client_update():
     with patch(
         "custom_components.indygo_pool.IndygoPoolApiClient.async_get_data",
         new_callable=AsyncMock,
+        return_value=None,
     ) as mock:
         yield mock
 
