@@ -75,7 +75,7 @@ class IndygoPoolApiClient:
             request_headers.update(headers)
 
         try:
-            LOGGER.debug(f"--- REQUEST: {method} {url} ---")
+            LOGGER.debug("--- REQUEST: %s %s ---", method, url)
             async with self._session.request(
                 method,
                 url,
@@ -298,14 +298,10 @@ class IndygoPoolApiClient:
         # 4. Fetch all programs and module name to send a complete set
         module_programs = []
         module_name = ""
-        if hasattr(self, "_data") and self._data and module_id in self._data.modules:
+        if self._data and module_id in self._data.modules:
             module_programs = self._data.modules[module_id].programs
             module_name = self._data.modules[module_id].name
-        elif (
-            hasattr(self, "_scraped_programs")
-            and self._scraped_programs
-            and module_id in self._scraped_programs
-        ):
+        elif self._scraped_programs and module_id in self._scraped_programs:
             module_programs = self._scraped_programs[module_id]
 
         # Replace the old program in the list with the newly updated one
@@ -397,7 +393,7 @@ class IndygoPoolApiClient:
     def _get_module_serial(self, module_id: str) -> str | None:
         """Get module serial number from various sources."""
         # Try from cached data
-        if hasattr(self, "_data") and self._data and module_id in self._data.modules:
+        if self._data and module_id in self._data.modules:
             serial = self._data.modules[module_id].raw_data.get("serialNumber")
             if serial:
                 return serial
@@ -523,8 +519,7 @@ class IndygoPoolApiClient:
 
             # 6. LoRaWAN Synchronization for V2 modules
             if (
-                hasattr(self, "_data")
-                and self._data
+                self._data
                 and module_id in self._data.modules
                 and self._data.modules[module_id].raw_data.get("typeIsLoraWanV2", False)
             ):

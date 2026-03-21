@@ -6,7 +6,8 @@
                 "description": "Please enter your MyIndygo credentials.",
                 "data": {
                     "email": "Email",
-                    "password": "Password"
+                    "password": "Password",
+                    "pool_id": "Pool ID"
                 }
             }
         },
@@ -48,7 +49,7 @@
         },
         "binary_sensor": {
             "is_online": {
-                "name": "Online"
+                "name": "{module} online"
             },
             "shutter": {
                 "name": "Shutter"

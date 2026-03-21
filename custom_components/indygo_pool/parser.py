@@ -5,15 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import re
-from enum import Enum
-
-try:
-    from enum import StrEnum
-except ImportError:
-    # Python < 3.11 fallback
-    class StrEnum(str, Enum):  # noqa: UP042
-        pass
-
 
 from .const import PROGRAM_TYPE_FILTRATION
 from .models import IndygoModuleData, IndygoPoolData, IndygoSensorData
