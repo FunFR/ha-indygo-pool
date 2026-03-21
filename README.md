@@ -30,7 +30,7 @@ Indygo Pool is a custom integration for Home Assistant that allows you to monito
 
 ### Manual
 
-1. Download the latest release.
+1. Download the latest release from the repository.
 2. Copy the `indygo_pool` directory from `custom_components` to your Home Assistant `config/custom_components` directory.
 3. Restart Home Assistant.
 
@@ -44,9 +44,13 @@ Add the integration: [![Add Integration][add-integration-badge]][add-integration
 4. Enter your MyIndygo credentials (email, password) and your **Pool ID**.
     > The **Pool ID** can be found in the URL after logging into myindygo.com (e.g., `https://myindygo.com/pools/<Pool ID>/devices`).
 
+## Contributing
+
+We welcome contributions! Please review [CONTRIBUTING.md](CONTRIBUTING.md) for environment setup and pull request guidelines. If you are an AI agent or looking for project architecture rules, refer to [AGENTS.md](AGENTS.md).
+
 ## Disclaimer
 
-This integration is not affiliated with or endorsed by MyIndygo. It uses a scraper to retrieve data from the MyIndygo website. Use it at your own risk.
+This integration is not affiliated with or endorsed by MyIndygo. It uses an API scraper to retrieve data from the MyIndygo website. Use it at your own risk.
 
 ## Support
 
