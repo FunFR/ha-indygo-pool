@@ -3,7 +3,9 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.indygo_pool import (
@@ -42,6 +44,9 @@ async def test_setup_and_unload_entry(hass: HomeAssistant, mock_client_update):
     )
     entry.add_to_hass(hass)
 
+    # Mock entry state to SETUP_IN_PROGRESS to avoid first_refresh check failure
+    entry.mock_state(hass, ConfigEntryState.SETUP_IN_PROGRESS)
+
     with patch(
         "homeassistant.config_entries.ConfigEntries.async_forward_entry_setups",
         new_callable=AsyncMock,
@@ -79,9 +84,12 @@ async def test_setup_entry_update_failed(hass: HomeAssistant):
     )
     entry.add_to_hass(hass)
 
+    # Mock entry state to SETUP_IN_PROGRESS
+    entry.mock_state(hass, ConfigEntryState.SETUP_IN_PROGRESS)
+
     with patch(
         "custom_components.indygo_pool.IndygoPoolApiClient.async_get_data",
         side_effect=Exception("Test Error"),
     ):
-        with pytest.raises(Exception, match="Test Error"):
+        with pytest.raises(ConfigEntryNotReady):
             await async_setup_entry(hass, entry)
