@@ -30,14 +30,17 @@ class IndygoPoolDataUpdateCoordinator(DataUpdateCoordinator[IndygoPoolData]):
         self,
         hass: HomeAssistant,
         client: IndygoPoolApiClient,
+        entry: ConfigEntry,
     ) -> None:
         """Initialize."""
         self.client = client
+        self.config_entry = entry
         super().__init__(
             hass,
             LOGGER,
             name=DOMAIN,
             update_interval=timedelta(minutes=5),
+            config_entry=entry,
         )
 
     async def _async_update_data(self) -> IndygoPoolData:

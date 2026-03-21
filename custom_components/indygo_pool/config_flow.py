@@ -47,6 +47,9 @@ class IndygoPoolFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             except IndygoPoolApiClientError:
                 LOGGER.exception("Unknown error during config flow")
                 errors["base"] = "unknown"
+            except Exception:  # pylint: disable=broad-except
+                LOGGER.exception("Unexpected exception")
+                errors["base"] = "unknown"
             else:
                 return self.async_create_entry(
                     title=user_input[CONF_EMAIL],
@@ -71,15 +74,11 @@ class IndygoPoolFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         cookie_jar = aiohttp.CookieJar(unsafe=True)
         session = async_create_clientsession(self.hass, cookie_jar=cookie_jar)
 
-        try:
-            client = IndygoPoolApiClient(
-                email=email,
-                password=password,
-                pool_id=pool_id,
-                session=session,
-            )
-            # Test credentials by attempting to get data
-            await client.async_get_data()
-        finally:
-            # Always close the session
-            await session.close()
+        client = IndygoPoolApiClient(
+            email=email,
+            password=password,
+            pool_id=pool_id,
+            session=session,
+        )
+        # Test credentials by attempting to get data
+        await client.async_get_data()
