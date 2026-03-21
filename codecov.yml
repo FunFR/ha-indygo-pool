@@ -1,0 +1,18 @@
+# Codecov configuration
+# https://docs.codecov.com/docs/codecovyml-reference
+
+coverage:
+  status:
+    project:
+      default:
+        target: 85%      # Min overall coverage
+        threshold: 1%    # Leniency
+    patch:
+      default:
+        target: auto     # New code should match or exceed current coverage
+        threshold: 0%
+
+comment:
+  layout: "reach, diff, flags, files"
+  behavior: default
+  require_changes: false  # Always post a comment for visibility initially

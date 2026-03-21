@@ -6,6 +6,7 @@
 [![HACS][hacs-shield]][hacs]
 
 [![Tests][tests-shield]][tests]
+[![Codecov][codecov-shield]][codecov]
 [![Validate][validate-shield]][validate]
 [![Release][release-workflow-shield]][release-workflow]
 
@@ -68,6 +69,8 @@ If you found this integration helpful, feel free to buy me a coffee!
 [issues-shield]: https://img.shields.io/github/issues/FunFR/ha-indygo-pool.svg
 [tests]: https://github.com/FunFR/ha-indygo-pool/actions/workflows/test.yml
 [tests-shield]: https://github.com/FunFR/ha-indygo-pool/actions/workflows/test.yml/badge.svg
+[codecov]: https://codecov.io/github/FunFR/ha-indygo-pool
+[codecov-shield]: https://codecov.io/github/FunFR/ha-indygo-pool/graph/badge.svg?token=6Q4PC2ZY3O
 [validate]: https://github.com/FunFR/ha-indygo-pool/actions/workflows/validate.yml
 [validate-shield]: https://github.com/FunFR/ha-indygo-pool/actions/workflows/validate.yml/badge.svg
 [release-workflow]: https://github.com/FunFR/ha-indygo-pool/actions/workflows/release.yml

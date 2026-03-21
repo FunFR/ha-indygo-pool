@@ -11,7 +11,7 @@ exclude = ["tests", "config", "docs"]
 name = "ha-indygo-pool"
 version = "2.0.1"
 description = "Home Assistant integration for Indygo Pool"
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 authors = [
     { name = "FunFR" }
 ]
@@ -35,6 +35,7 @@ dev = [
     "aioresponses>=0.7.8",
     "commitizen>=4.10.1",
     "python-dotenv>=1.2.1",
+    "pytest-cov",
 ]
 
 [tool.ruff]
@@ -48,6 +49,30 @@ ignore = ["PLR0913"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 norecursedirs = [".git", "testing_config"]
+asyncio_mode = "auto"
+pythonpath = ["."]
+markers = [
+    "integration: tests that require real API credentials",
+]
+addopts = "--cov=custom_components.indygo_pool --cov-report=term-missing --cov-report=xml"
+
+[tool.coverage.run]
+source = ["custom_components/indygo_pool"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 85
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "pass",
+    "try:",
+    "except ImportError:",
+]
 
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
