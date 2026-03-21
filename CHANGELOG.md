@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v2.1.2 (2026-03-21)
+
+### Bug Fixes
+
+- Add state_class to ph and ph_setpoint sensors
+  ([#90](https://github.com/FunFR/ha-indygo-pool/pull/90),
+  [`f361a03`](https://github.com/FunFR/ha-indygo-pool/commit/f361a03a5d1f22f1e86ee84602dde5f6c8b43d6a))
+
+- Treat ph/ph_setpoint as floats and fix via_device warning
+  ([#90](https://github.com/FunFR/ha-indygo-pool/pull/90),
+  [`f361a03`](https://github.com/FunFR/ha-indygo-pool/commit/f361a03a5d1f22f1e86ee84602dde5f6c8b43d6a))
+
+
 ## v2.1.1 (2026-03-21)
 
 ### Continuous Integration
