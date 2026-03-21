@@ -2,6 +2,23 @@
 
 <!-- version list -->
 
+## v2.1.1 (2026-03-21)
+
+### Continuous Integration
+
+- Remove redundant coverage comment action ([#89](https://github.com/FunFR/ha-indygo-pool/pull/89),
+  [`d3420e2`](https://github.com/FunFR/ha-indygo-pool/commit/d3420e25bc406d78977ba11f61e7f759fedab9cd))
+
+- **deps**: Pin dependencies
+  ([`925806f`](https://github.com/FunFR/ha-indygo-pool/commit/925806f3c33e8415d31334d833de366224de5d21))
+
+### Refactoring
+
+- Clean up dead code, unused deps, and translations
+  ([#89](https://github.com/FunFR/ha-indygo-pool/pull/89),
+  [`d3420e2`](https://github.com/FunFR/ha-indygo-pool/commit/d3420e25bc406d78977ba11f61e7f759fedab9cd))
+
+
 ## v2.1.0 (2026-03-21)
 
 ### Chores
