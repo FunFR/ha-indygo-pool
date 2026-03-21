@@ -55,6 +55,8 @@ SENSOR_TYPES: tuple[IndygoSensorEntityDescription, ...] = (
     IndygoSensorEntityDescription(
         key="ph_setpoint",
         translation_key="ph_setpoint",
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
     ),
     IndygoSensorEntityDescription(
         key="production_setpoint",
@@ -69,6 +71,8 @@ SENSOR_TYPES: tuple[IndygoSensorEntityDescription, ...] = (
     IndygoSensorEntityDescription(
         key="ph",
         translation_key="ph",
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
     ),
 )
 
