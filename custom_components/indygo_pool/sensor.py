@@ -12,7 +12,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EntityCategory, UnitOfTemperature
+from homeassistant.const import EntityCategory, UnitOfTemperature, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import slugify
@@ -31,12 +31,10 @@ SENSOR_TYPES: tuple[IndygoSensorEntityDescription, ...] = (
     IndygoSensorEntityDescription(
         key="filtration_status",
         translation_key="filtration_status",
-        name="Filtration status",
     ),
     IndygoSensorEntityDescription(
         key="temperature",
         translation_key="water_temperature",
-        name="Water temperature",
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
@@ -44,39 +42,33 @@ SENSOR_TYPES: tuple[IndygoSensorEntityDescription, ...] = (
     IndygoSensorEntityDescription(
         key="totalElectrolyseDuration",
         translation_key="electrolyzer_duration",
-        name="Electrolyzer duration",
-        native_unit_of_measurement="h",
+        native_unit_of_measurement=UnitOfTime.HOURS,
         entity_category=EntityCategory.DIAGNOSTIC,
         state_class=SensorStateClass.MEASUREMENT,
     ),
     IndygoSensorEntityDescription(
         key="ipx_salt",
         translation_key="ipx_salt",
-        name="Salt level",
         native_unit_of_measurement="g/L",
         state_class=SensorStateClass.MEASUREMENT,
     ),
     IndygoSensorEntityDescription(
         key="ph_setpoint",
         translation_key="ph_setpoint",
-        name="pH setpoint",
     ),
     IndygoSensorEntityDescription(
         key="production_setpoint",
         translation_key="production_setpoint",
-        name="Production setpoint",
         native_unit_of_measurement="%",
     ),
     IndygoSensorEntityDescription(
         key="electrolyzer_mode",
         translation_key="electrolyzer_mode",
-        name="Electrolyzer mode",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     IndygoSensorEntityDescription(
         key="ph",
         translation_key="ph",
-        name="pH",
     ),
 )
 
