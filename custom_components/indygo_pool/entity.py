@@ -52,6 +52,6 @@ class IndygoPoolEntity(CoordinatorEntity[IndygoPoolDataUpdateCoordinator]):
     @property
     def device_name_slug(self) -> str:
         """Return the device name slug."""
-        if hasattr(self, "_attr_device_info") and self._attr_device_info:
+        if self._attr_device_info:
             return slugify(self._attr_device_info["name"])
         return slugify(f"{NAME} {self._pool_unique_id[:8]}")

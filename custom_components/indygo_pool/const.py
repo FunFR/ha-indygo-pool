@@ -13,13 +13,3 @@ CONF_PASSWORD = "password"
 CONF_POOL_ID = "pool_id"
 
 PROGRAM_TYPE_FILTRATION = 4
-
-ATTRIBUTION = "Data provided by MyIndygo"
-
-STARTUP_MESSAGE = f"""
--------------------------------------------------------------------
-{NAME}
-Version: {VERSION}
-This is a custom integration!
--------------------------------------------------------------------
-"""

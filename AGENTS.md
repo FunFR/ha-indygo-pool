@@ -29,7 +29,7 @@ This file serves as a guide for AI agents working on the `ha-indygo-pool` projec
 2.  **Plan**: If complex, create an `implementation_plan.md`.
 3.  **Implement**: Make changes following the structure above.
 4.  **Verify & Commit**: You **MUST** follow the QA Checklist (testing, linting, formatting) and Tech Stack constraints defined in [CONTRIBUTING.md](CONTRIBUTING.md).
-    - **Conventional Commits**: Use `feat:`, `fix:`, `refactor:`, etc., for SemVer.
+    - **Conventional Commits**: Use `feat:`, `fix:`, `refactor:`, etc., for SemVer. Keep commit messages **concise**.
     - **Breaking Changes**: ONLY flag a commit as a breaking change (`!`) if it fundamentally breaks the user's HA configuration (e.g., removing an entity entirely, changing the integration domain, or altering required config steps).
 
 ## 📚 References

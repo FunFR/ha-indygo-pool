@@ -16,9 +16,7 @@ authors = [
     { name = "FunFR" }
 ]
 license = { text = "Apache-2.0" }
-dependencies = [
-    "beautifulsoup4>=4.12.3",
-]
+dependencies = []
 
 [project.optional-dependencies]
 dev = [

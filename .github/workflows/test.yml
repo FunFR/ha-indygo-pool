@@ -9,7 +9,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   test:
@@ -40,14 +39,3 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.xml
           fail_ci_if_error: false
-      - name: Pytest coverage comment
-        if: github.event_name == 'pull_request'
-        uses: MishaKav/pytest-coverage-comment@287292879eaaff04116f36d3eb1a670f6e5df1a4 # v1
-        with:
-          pytest-xml-coverage-path: ./coverage.xml
-          title: Test Coverage Report
-          badge-title: Coverage
-          hide-badge: false
-          hide-report: false
-          create-new-comment: false
-          update-comment: true
