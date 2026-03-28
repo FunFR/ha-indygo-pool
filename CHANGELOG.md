@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v2.3.1 (2026-03-28)
+
+### Bug Fixes
+
+- Switch to OAuth2 API to fix pump mode transitions (On↔Auto)
+  ([#100](https://github.com/FunFR/ha-indygo-pool/pull/100),
+  [`1565aa0`](https://github.com/FunFR/ha-indygo-pool/commit/1565aa0cb90109954dd1af664b2f3fb83fbf3dbb))
+
+### Continuous Integration
+
+- **deps**: Update actions/stale action to v10
+  ([#99](https://github.com/FunFR/ha-indygo-pool/pull/99),
+  [`b4e05ff`](https://github.com/FunFR/ha-indygo-pool/commit/b4e05ffdf254860cd5b231f893a961b93dcbc4e8))
+
+
 ## v2.3.0 (2026-03-28)
 
 ### Features
