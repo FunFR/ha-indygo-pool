@@ -1,0 +1,72 @@
+name-template: "v$RESOLVED_VERSION"
+tag-template: "v$RESOLVED_VERSION"
+
+autolabeler:
+  - label: "feature"
+    title:
+      - "/^feat(\\(.+\\))?:/i"
+  - label: "bug"
+    title:
+      - "/^fix(\\(.+\\))?:/i"
+  - label: "breaking"
+    title:
+      - "/^\\w+(\\(.+\\))?!:/i"
+  - label: "chore"
+    title:
+      - "/^(chore|docs|style|test|build)(\\(.+\\))?:/i"
+  - label: "ci"
+    title:
+      - "/^ci(\\(.+\\))?:/i"
+  - label: "refactor"
+    title:
+      - "/^(refactor|perf)(\\(.+\\))?:/i"
+  - label: "dependencies"
+    branch:
+      - "/^renovate\\//i"
+
+categories:
+  - title: "Breaking Changes"
+    labels:
+      - "breaking"
+  - title: "Features"
+    labels:
+      - "feature"
+      - "enhancement"
+  - title: "Bug Fixes"
+    labels:
+      - "bug"
+      - "fix"
+  - title: "Maintenance"
+    labels:
+      - "chore"
+      - "ci"
+      - "dependencies"
+      - "refactor"
+
+change-template: "- $TITLE (#$NUMBER) @$AUTHOR"
+change-title-escapes: '\<*_&'
+
+version-resolver:
+  major:
+    labels:
+      - "breaking"
+  minor:
+    labels:
+      - "feature"
+      - "enhancement"
+  patch:
+    labels:
+      - "bug"
+      - "fix"
+      - "chore"
+      - "ci"
+      - "dependencies"
+      - "refactor"
+  default: patch
+
+template: |
+  ## What's Changed
+
+  $CHANGES
+
+  **Full Changelog**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
