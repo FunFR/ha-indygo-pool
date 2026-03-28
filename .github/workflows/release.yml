@@ -1,44 +1,40 @@
 name: Release
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+  release:
+    types:
+      - published
 
 permissions:
-  id-token: write
   contents: write
 
 jobs:
   release:
-    name: Release
+    name: Build and upload release asset
     runs-on: ubuntu-latest
-    concurrency: release
     steps:
-      - name: Generate token
-        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3
-        id: app-token
-        with:
-          app-id: ${{ secrets.RELEASE_APP_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          VERSION="${TAG#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Inject version into manifest.json
+        run: |
+          cd custom_components/indygo_pool
+          jq --arg v "${{ steps.version.outputs.version }}" '.version = $v' manifest.json > manifest.tmp
+          mv manifest.tmp manifest.json
+
+      - name: Build zip
+        run: |
+          cd custom_components/indygo_pool
+          zip -r ../../indygo_pool.zip . -x '*.pyc' -x '__pycache__/*'
+
+      - name: Upload zip to release
+        uses: softprops/action-gh-release@7b4da11513bf3f43f9999e90eabced41ab8f3c11 # v2
         with:
-          fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token }}
-          ref: ${{ github.head_ref || github.ref }}
-      - name: Semantic Version Release
-        id: release
-        uses: python-semantic-release/python-semantic-release@350c48fcb3ffcdfd2e0a235206bc2ecea6b69df0 # v10
-        with:
-          github_token: ${{ steps.app-token.outputs.token }}
-          verbosity: "2"
-      - name: Upload to GitHub Release Assets
-        uses: python-semantic-release/publish-action@310a9983a0ae878b29f3aac778d7c77c1db27378 # v10.5.3
-        if: steps.release.outputs.released == 'true'
-        with:
-          github_token: ${{ steps.app-token.outputs.token }}
-          verbosity: "2"
+          files: indygo_pool.zip

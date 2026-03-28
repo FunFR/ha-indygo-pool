@@ -9,7 +9,7 @@ exclude = ["tests", "config", "docs"]
 
 [project]
 name = "ha-indygo-pool"
-version = "2.3.1"
+version = "0.0.0"
 description = "Home Assistant integration for Indygo Pool"
 requires-python = ">=3.12"
 authors = [
@@ -71,25 +71,3 @@ exclude_lines = [
     "try:",
     "except ImportError:",
 ]
-
-[tool.semantic_release]
-version_toml = ["pyproject.toml:project.version"]
-version_variables = [
-    "custom_components/indygo_pool/manifest.json:version",
-    "custom_components/indygo_pool/const.py:VERSION",
-]
-branch = "main"
-strict = true
-build_command = "pip install uv build && uv lock && git add uv.lock && python -m build && python scripts/zip_release.py"
-
-[tool.semantic_release.publish]
-dist_glob_patterns = ["dist/indygo_pool.zip"]
-upload_to_vcs_release = true
-
-[tool.semantic_release.commit_parser_options]
-allowed_tags = ["build", "chore", "ci", "docs", "feat", "fix", "perf", "style", "refactor", "test"]
-minor_tags = ["feat"]
-patch_tags = ["fix", "perf", "refactor"]
-
-[tool.semantic_release.remote]
-type = "github"
