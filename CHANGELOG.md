@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v2.3.0 (2026-03-28)
+
+### Features
+
+- Simplify codebase with shared helpers, cached state, and stale workflow
+  ([#98](https://github.com/FunFR/ha-indygo-pool/pull/98),
+  [`f428a9f`](https://github.com/FunFR/ha-indygo-pool/commit/f428a9fa3e2734d9f867583d9c1789eb43a22271))
+
+
 ## v2.2.0 (2026-03-28)
 
 ### Chores
