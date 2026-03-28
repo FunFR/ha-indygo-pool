@@ -2,6 +2,42 @@
 
 <!-- version list -->
 
+## v2.2.0 (2026-03-28)
+
+### Chores
+
+- **deps**: Update ghcr.io/home-assistant/home-assistant:stable docker digest to 4c1d99a
+  ([#91](https://github.com/FunFR/ha-indygo-pool/pull/91),
+  [`dbbf871`](https://github.com/FunFR/ha-indygo-pool/commit/dbbf871aaf39031551a25b17c6bc89705276c945))
+
+- **deps**: Update ghcr.io/home-assistant/home-assistant:stable docker digest to 9166820
+  ([#92](https://github.com/FunFR/ha-indygo-pool/pull/92),
+  [`bd9ca16`](https://github.com/FunFR/ha-indygo-pool/commit/bd9ca1645a1579e4a67e7a6d84069f1fc8d65c64))
+
+- **deps**: Update pre-commit hook astral-sh/ruff-pre-commit to v0.15.8
+  ([#96](https://github.com/FunFR/ha-indygo-pool/pull/96),
+  [`1232279`](https://github.com/FunFR/ha-indygo-pool/commit/1232279a0986948059683423265c6610a53677e4))
+
+### Continuous Integration
+
+- **deps**: Pin dependencies ([#93](https://github.com/FunFR/ha-indygo-pool/pull/93),
+  [`6147444`](https://github.com/FunFR/ha-indygo-pool/commit/614744428a5688d6fad08875ef19ea24bd7edaac))
+
+- **deps**: Update codecov/codecov-action action to v6
+  ([#94](https://github.com/FunFR/ha-indygo-pool/pull/94),
+  [`fcc7884`](https://github.com/FunFR/ha-indygo-pool/commit/fcc78841521507e492dae9382c3b7d07e3cdf101))
+
+- **deps**: Update codecov/codecov-action digest to 75cd116
+  ([#95](https://github.com/FunFR/ha-indygo-pool/pull/95),
+  [`a9dd2db`](https://github.com/FunFR/ha-indygo-pool/commit/a9dd2dbf0d7db282f2fc1ed18c81b803d7f8d2a9))
+
+### Features
+
+- Expose filtration schedule and remaining time from Auto mode
+  ([#97](https://github.com/FunFR/ha-indygo-pool/pull/97),
+  [`e45f329`](https://github.com/FunFR/ha-indygo-pool/commit/e45f329bb0a582c3c265197accb3ea7b194e0aa1))
+
+
 ## v2.1.2 (2026-03-21)
 
 ### Bug Fixes
