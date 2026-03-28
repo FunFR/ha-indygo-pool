@@ -1,6 +1,10 @@
 """Tests for Indygo Parser."""
 
-from custom_components.indygo_pool.parser import IndygoParser
+from custom_components.indygo_pool.parser import (
+    IndygoParser,
+    _get_nested,
+    _js_var_regex,
+)
 
 # Constants for testing
 TEST_POOL_ID = "123"
@@ -628,3 +632,56 @@ class TestIndygoParser:
             {"ipx_module": {"outputs": [{"ipxData": {}}]}}, "POOL1", "ADDR1", "RELAY1"
         )
         assert "ipx_salt" not in data.sensors
+
+
+class TestGetNested:
+    """Tests for the _get_nested helper."""
+
+    def test_traverses_dict(self):
+        """Test basic dict traversal."""
+        assert _get_nested({"a": {"b": 1}}, "a", "b") == 1
+
+    def test_traverses_list_by_index(self):
+        """Test list traversal by numeric key."""
+        expected = 20
+        assert _get_nested([10, 20, 30], "1") == expected
+
+    def test_returns_none_on_non_traversable(self):
+        """Test early return when encountering a non-dict/list value."""
+        assert _get_nested({"a": 42}, "a", "b") is None
+
+    def test_returns_none_on_none_input(self):
+        """Test with None input."""
+        assert _get_nested(None, "a") is None
+
+    def test_returns_none_on_index_error(self):
+        """Test with out-of-range list index."""
+        assert _get_nested([1], "5") is None
+
+    def test_returns_none_on_invalid_index(self):
+        """Test with non-numeric key on a list."""
+        assert _get_nested([1, 2], "abc") is None
+
+
+class TestJsVarRegex:
+    """Tests for the _js_var_regex helper."""
+
+    def test_matches_var(self):
+        """Test matching var declaration."""
+        regex = _js_var_regex("myVar", r"\{")
+        assert regex.search("var myVar = {};") is not None
+
+    def test_matches_const(self):
+        """Test matching const declaration."""
+        regex = _js_var_regex("myVar", r"\[")
+        assert regex.search("const myVar = [];") is not None
+
+    def test_matches_window_dot(self):
+        """Test matching window.property assignment."""
+        regex = _js_var_regex("myVar")
+        assert regex.search("window.myVar = {};") is not None
+
+    def test_no_match(self):
+        """Test no match for unrelated content."""
+        regex = _js_var_regex("myVar")
+        assert regex.search("var otherVar = {};") is None

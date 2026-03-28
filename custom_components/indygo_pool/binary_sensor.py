@@ -185,21 +185,19 @@ class IndygoPoolBinarySensor(IndygoPoolEntity, BinarySensorEntity):
         """Initialize."""
         super().__init__(coordinator, module_id)
         self.entity_description = description
-        self._module_id = module_id
 
         if description.key == "isOnline" and module_name:
             self._attr_translation_placeholders = {"module": module_name}
 
-        # Unique ID: PoolID_ModuleID_Key
-        self._attr_unique_id = (
-            f"{self._pool_unique_id}_{module_id}_{description.key}"
-            if module_id
-            else f"{self._pool_unique_id}_{description.key}"
-        )
-
-        # Force English entity_id
+        self._attr_unique_id = self._build_unique_id(description.key)
         suffix = slugify(description.translation_key)
         self.entity_id = f"binary_sensor.{self.device_name_slug}_{suffix}"
+
+    def _get_pool_status(self) -> dict:
+        """Resolve the correct pool_status dict (module-level or root)."""
+        if self._module_id and self._module_id in self.coordinator.data.modules:
+            return self.coordinator.data.modules[self._module_id].pool_status
+        return self.coordinator.data.pool_status
 
     @property
     def is_on(self) -> bool | None:
@@ -207,15 +205,9 @@ class IndygoPoolBinarySensor(IndygoPoolEntity, BinarySensorEntity):
         desc = self.entity_description
 
         if desc.is_pool_status:
-            target_status = self.coordinator.data.pool_status
-            if self._module_id and self._module_id in self.coordinator.data.modules:
-                target_status = self.coordinator.data.modules[
-                    self._module_id
-                ].pool_status
-
+            target_status = self._get_pool_status()
             if desc.key in target_status:
-                data = target_status[desc.key]
-                val = data.value
+                val = target_status[desc.key].value
                 if val is not None:
                     try:
                         return float(val) == 1.0
@@ -250,12 +242,7 @@ class IndygoPoolBinarySensor(IndygoPoolEntity, BinarySensorEntity):
         """Return the state attributes."""
         desc = self.entity_description
         if desc.is_pool_status:
-            target_status = self.coordinator.data.pool_status
-            if self._module_id and self._module_id in self.coordinator.data.modules:
-                target_status = self.coordinator.data.modules[
-                    self._module_id
-                ].pool_status
-
+            target_status = self._get_pool_status()
             if desc.key in target_status:
                 return target_status[desc.key].extra_attributes
         return None

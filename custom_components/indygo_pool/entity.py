@@ -23,6 +23,7 @@ class IndygoPoolEntity(CoordinatorEntity[IndygoPoolDataUpdateCoordinator]):
     ) -> None:
         """Initialize."""
         super().__init__(coordinator)
+        self._module_id = module_id
 
         if coordinator.data and coordinator.data.pool_id:
             pool_id = coordinator.data.pool_id
@@ -49,9 +50,15 @@ class IndygoPoolEntity(CoordinatorEntity[IndygoPoolDataUpdateCoordinator]):
                 manufacturer=NAME,
             )
 
+        self._device_name_slug = slugify(self._attr_device_info["name"])
+
     @property
     def device_name_slug(self) -> str:
         """Return the device name slug."""
-        if self._attr_device_info:
-            return slugify(self._attr_device_info["name"])
-        return slugify(f"{NAME} {self._pool_unique_id[:8]}")
+        return self._device_name_slug
+
+    def _build_unique_id(self, key: str) -> str:
+        """Build a unique ID from pool ID, optional module ID, and key."""
+        if self._module_id:
+            return f"{self._pool_unique_id}_{self._module_id}_{key}"
+        return f"{self._pool_unique_id}_{key}"

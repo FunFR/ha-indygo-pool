@@ -36,6 +36,7 @@ class IndygoPoolApiClient:
             "Chrome/120.0.0.0 Safari/537.36"
         )
     }
+    JSON_HEADERS = {"Content-Type": "application/json"}
 
     def __init__(
         self,
@@ -144,16 +145,13 @@ class IndygoPoolApiClient:
     async def async_login(self) -> None:
         """Login to the API."""
         try:
-            # Login payload
             data = {
                 "email": self._email,
                 "password": self._password,
             }
 
-            # Perform login
             await self._request("GET", "https://myindygo.com/login", retry_auth=False)
 
-            # Then POST credentials
             async with self._session.post(
                 "https://myindygo.com/login",
                 data=data,
@@ -182,35 +180,35 @@ class IndygoPoolApiClient:
 
     async def async_refresh_scraped_data(self) -> None:
         """Fetch and parse the pool devices page to get fresh scraped data."""
-        # Note: We run this every update because some data (IPX sensors) is only
-        # available on the devices page HTML/JS, not in the status JSON API.
-
         url = f"https://myindygo.com/pools/{self._pool_id}/devices"
         text = await self._request("GET", url, retry_auth=True)
-        # Type check helper since _request returns Union
         if not isinstance(text, str):
-            # Should not happen if return_json=False
             text = str(text)
 
-        # Parse Pool IDs and metadata
-        pool_address, device_short_id, relay_id, pool_metadata = (
-            self._parser.parse_pool_ids(text, self._pool_id)
+        # Static IDs (pool_address, device_short_id, relay_id) are tied to
+        # hardware and don't change between polls — parse them only once.
+        ids_missing = (
+            not self._pool_address or not self._device_short_id or not self._relay_id
         )
-        self._ipx_module_metadata = self._parser.parse_ipx_module(text)
-
-        # Parse Programs (from embedded JS)
-        self._scraped_programs = self._parser.parse_programs_from_html(text)
-
-        if not pool_address or not device_short_id or not relay_id:
-            LOGGER.error("HTML (truncated): %s", text[:1000])
-            raise IndygoPoolApiClientError(
-                "Could not determine Pool Address, Device Short ID, or Relay ID."
+        if ids_missing:
+            pool_address, device_short_id, relay_id, pool_metadata = (
+                self._parser.parse_pool_ids(text, self._pool_id)
             )
 
-        self._pool_address = pool_address
-        self._device_short_id = device_short_id
-        self._relay_id = relay_id
-        self._pool_metadata = pool_metadata
+            if not pool_address or not device_short_id or not relay_id:
+                LOGGER.error("HTML (truncated): %s", text[:1000])
+                raise IndygoPoolApiClientError(
+                    "Could not determine Pool Address, Device Short ID, or Relay ID."
+                )
+
+            self._pool_address = pool_address
+            self._device_short_id = device_short_id
+            self._relay_id = relay_id
+            self._pool_metadata = pool_metadata
+
+        # Dynamic data — always refresh
+        self._ipx_module_metadata = self._parser.parse_ipx_module(text)
+        self._scraped_programs = self._parser.parse_programs_from_html(text)
 
         LOGGER.debug(
             "Refreshed scraped data: gateway_serial=%s, device_short_id=%s, "
@@ -280,10 +278,8 @@ class IndygoPoolApiClient:
         We MUST send back the FULL program object, otherwise we risk corrupting
         the device configuration (erasing timers, etc.).
         """
-        # 1. Deep copy to avoid mutating the source
         program_copy = copy.deepcopy(full_program_data)
 
-        # 2. Update the mode
         # Mode: 0=OFF, 1=ON, 2=AUTO
         if "programCharacteristics" in program_copy:
             program_copy["programCharacteristics"]["mode"] = mode
@@ -292,10 +288,7 @@ class IndygoPoolApiClient:
                 "Invalid program data: missing programCharacteristics"
             )
 
-        # 3. Set dataChanged flag to trigger activation
         program_copy["dataChanged"] = True
-
-        # 4. Fetch all programs and module name to send a complete set
         module_programs = []
         module_name = ""
         if self._data and module_id in self._data.modules:
@@ -308,11 +301,12 @@ class IndygoPoolApiClient:
         # and set dataChanged=True on ALL programs
         updated_programs = []
         program_id = program_copy.get("id")
+        program_found = False
         for prog in module_programs:
             if prog.get("id") == program_id:
                 updated_programs.append(program_copy)
+                program_found = True
             else:
-                # Deep copy other programs and set dataChanged=True on them too
                 prog_copy = copy.deepcopy(prog)
                 prog_copy["dataChanged"] = True
 
@@ -321,7 +315,6 @@ class IndygoPoolApiClient:
                     "programType"
                 )
                 if prog_type != PROGRAM_TYPE_FILTRATION:
-                    # Set mode to None for non-filtration programs
                     if (
                         "programCharacteristics" in prog_copy
                         and "mode" in prog_copy["programCharacteristics"]
@@ -330,7 +323,7 @@ class IndygoPoolApiClient:
 
                 updated_programs.append(prog_copy)
 
-        if not any(p.get("id") == program_id for p in updated_programs):
+        if not program_found:
             updated_programs.append(program_copy)
 
         # 5. Construct payload with ALL programs
@@ -350,7 +343,7 @@ class IndygoPoolApiClient:
         )
 
         try:
-            headers = {"Content-Type": "application/json"}
+            headers = self.JSON_HEADERS
 
             module_payload = {
                 "module": {
@@ -472,7 +465,7 @@ class IndygoPoolApiClient:
             LOGGER.warning("Missing relay_id, skipping remote sync")
             return
 
-        headers = {"Content-Type": "application/json"}
+        headers = self.JSON_HEADERS
         LOGGER.debug(
             "Applying remote changes for module %s (relay: %s)", module_id, relay_id
         )
@@ -568,7 +561,7 @@ class IndygoPoolApiClient:
         await self._request(
             "POST",
             "https://myindygo.com/remote/module/control",
-            headers={"Content-Type": "application/json"},
+            headers=self.JSON_HEADERS,
             data=json.dumps(payload),
             return_json=True,
             retry_auth=True,
@@ -597,7 +590,7 @@ class IndygoPoolApiClient:
             await self._request(
                 "POST",
                 url,
-                headers={"Content-Type": "application/json"},
+                headers=self.JSON_HEADERS,
                 data=json.dumps(payload),
                 return_json=True,
                 retry_auth=True,
