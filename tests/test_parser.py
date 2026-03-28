@@ -270,6 +270,345 @@ class TestIndygoParser:
         progs = parser.parse_programs_from_html(html)
         assert progs["MOD1"] == [{"id": 1}]
 
+    def test_parse_filtration_schedule_as_attributes(self):
+        """Test schedule is exposed as attributes on the filtration binary sensor."""
+        parser = IndygoParser()
+        json_data = {
+            "dialogTimeStamp": "2026-03-28T16:28:54Z",
+            "modules": [
+                {
+                    "id": "MOD1",
+                    "type": "lr-pc",
+                    "name": "Pump",
+                    "programs": [
+                        {
+                            "programCharacteristics": {
+                                "programType": FILTRATION_PROGRAM_TYPE,
+                                "mode": MODE_AUTO,
+                            },
+                            "temperatureSchedules": [
+                                {
+                                    "thresholds": [
+                                        [{"start": 300, "end": 360}],
+                                        [{"start": 720, "end": 900}],
+                                        [{"start": 660, "end": 960}],
+                                    ]
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+            "pool": [{"index": 0, "value": 1, "time": "01:30", "tempRef": 2}],
+        }
+        pool_data = parser.parse_data(json_data, "P1", "A1", "R1")
+        mod = pool_data.modules["MOD1"]
+
+        # Schedule should be in pool_status["0"] extra_attributes
+        attrs = mod.pool_status["0"].extra_attributes
+        assert attrs["schedule_start"] == "2026-03-28T11:00:00+00:00"
+        assert attrs["schedule_end"] == "2026-03-28T16:00:00+00:00"
+        expected_duration = 300
+        assert attrs["schedule_duration_minutes"] == expected_duration
+        assert len(attrs["schedule_windows"]) == 1
+        assert attrs["schedule_windows"][0] == {"start": "11:00", "end": "16:00"}
+
+        # Should NOT be separate sensors
+        assert "filtration_schedule_start" not in mod.sensors
+        assert "filtration_schedule_end" not in mod.sensors
+
+    def test_parse_filtration_schedule_multiple_windows(self):
+        """Test schedule with multiple filtration windows."""
+        parser = IndygoParser()
+        json_data = {
+            "dialogTimeStamp": "2026-03-28T10:00:00Z",
+            "modules": [
+                {
+                    "id": "MOD1",
+                    "type": "lr-pc",
+                    "name": "Pump",
+                    "programs": [
+                        {
+                            "programCharacteristics": {
+                                "programType": FILTRATION_PROGRAM_TYPE,
+                                "mode": MODE_AUTO,
+                            },
+                            "temperatureSchedules": [
+                                {
+                                    "thresholds": [
+                                        [
+                                            {"start": 300, "end": 360},
+                                            {"start": 1320, "end": 1380},
+                                        ],
+                                    ]
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+            "pool": [{"index": 0, "value": 1, "time": "00:45", "tempRef": 0}],
+        }
+        pool_data = parser.parse_data(json_data, "P1", "A1", "R1")
+        attrs = pool_data.modules["MOD1"].pool_status["0"].extra_attributes
+
+        assert attrs["schedule_start"] == "2026-03-28T05:00:00+00:00"
+        assert attrs["schedule_end"] == "2026-03-28T06:00:00+00:00"
+        expected_window_count = 2
+        assert len(attrs["schedule_windows"]) == expected_window_count
+        assert attrs["schedule_windows"][1] == {"start": "22:00", "end": "23:00"}
+        expected_duration = 120
+        assert attrs["schedule_duration_minutes"] == expected_duration
+
+    def test_parse_filtration_schedule_no_dialog_timestamp(self):
+        """Test schedule falls back to HH:MM when dialogTimeStamp is missing."""
+        parser = IndygoParser()
+        json_data = {
+            "modules": [
+                {
+                    "id": "MOD1",
+                    "type": "lr-pc",
+                    "name": "Pump",
+                    "programs": [
+                        {
+                            "programCharacteristics": {
+                                "programType": FILTRATION_PROGRAM_TYPE,
+                                "mode": MODE_AUTO,
+                            },
+                            "temperatureSchedules": [
+                                {"thresholds": [[{"start": 660, "end": 960}]]}
+                            ],
+                        }
+                    ],
+                }
+            ],
+            "pool": [{"index": 0, "value": 1, "tempRef": 0}],
+        }
+        pool_data = parser.parse_data(json_data, "P1", "A1", "R1")
+        attrs = pool_data.modules["MOD1"].pool_status["0"].extra_attributes
+        assert attrs["schedule_start"] == "11:00"
+        assert attrs["schedule_end"] == "16:00"
+
+    def test_parse_filtration_schedule_missing_data(self):
+        """Test schedule parsing with missing data doesn't crash."""
+        parser = IndygoParser()
+        json_data = {
+            "modules": [
+                {
+                    "id": "MOD1",
+                    "type": "lr-pc",
+                    "name": "Pump",
+                    "programs": [
+                        {
+                            "programCharacteristics": {
+                                "programType": FILTRATION_PROGRAM_TYPE,
+                                "mode": MODE_AUTO,
+                            },
+                        }
+                    ],
+                }
+            ],
+            "pool": [{"index": 0, "value": 1, "tempRef": 2}],
+        }
+        pool_data = parser.parse_data(json_data, "P1", "A1", "R1")
+        attrs = pool_data.modules["MOD1"].pool_status["0"].extra_attributes
+        assert "schedule_start" not in attrs
+
+    def test_parse_filtration_schedule_temp_ref_out_of_bounds(self):
+        """Test schedule when tempRef exceeds thresholds length."""
+        parser = IndygoParser()
+        json_data = {
+            "modules": [
+                {
+                    "id": "MOD1",
+                    "type": "lr-pc",
+                    "name": "Pump",
+                    "programs": [
+                        {
+                            "programCharacteristics": {
+                                "programType": FILTRATION_PROGRAM_TYPE,
+                                "mode": MODE_AUTO,
+                            },
+                            "temperatureSchedules": [
+                                {"thresholds": [[{"start": 660, "end": 960}]]}
+                            ],
+                        }
+                    ],
+                }
+            ],
+            "pool": [{"index": 0, "value": 1, "tempRef": 99}],
+        }
+        pool_data = parser.parse_data(json_data, "P1", "A1", "R1")
+        attrs = pool_data.modules["MOD1"].pool_status["0"].extra_attributes
+        assert "schedule_start" not in attrs
+
+    def test_parse_filtration_schedule_empty_windows(self):
+        """Test schedule when threshold entry is an empty list."""
+        parser = IndygoParser()
+        json_data = {
+            "modules": [
+                {
+                    "id": "MOD1",
+                    "type": "lr-pc",
+                    "name": "Pump",
+                    "programs": [
+                        {
+                            "programCharacteristics": {
+                                "programType": FILTRATION_PROGRAM_TYPE,
+                                "mode": MODE_AUTO,
+                            },
+                            "temperatureSchedules": [{"thresholds": [[]]}],
+                        }
+                    ],
+                }
+            ],
+            "pool": [{"index": 0, "value": 1, "tempRef": 0}],
+        }
+        pool_data = parser.parse_data(json_data, "P1", "A1", "R1")
+        attrs = pool_data.modules["MOD1"].pool_status["0"].extra_attributes
+        assert "schedule_start" not in attrs
+
+    def test_parse_filtration_schedule_window_missing_fields(self):
+        """Test schedule when first window is missing start or end."""
+        parser = IndygoParser()
+        json_data = {
+            "modules": [
+                {
+                    "id": "MOD1",
+                    "type": "lr-pc",
+                    "name": "Pump",
+                    "programs": [
+                        {
+                            "programCharacteristics": {
+                                "programType": FILTRATION_PROGRAM_TYPE,
+                                "mode": MODE_AUTO,
+                            },
+                            "temperatureSchedules": [
+                                {"thresholds": [[{"start": 660}]]}
+                            ],
+                        }
+                    ],
+                }
+            ],
+            "pool": [{"index": 0, "value": 1, "tempRef": 0}],
+        }
+        pool_data = parser.parse_data(json_data, "P1", "A1", "R1")
+        attrs = pool_data.modules["MOD1"].pool_status["0"].extra_attributes
+        assert "schedule_start" not in attrs
+
+    def test_parse_filtration_schedule_no_temp_ref(self):
+        """Test schedule parsing when tempRef is missing."""
+        parser = IndygoParser()
+        json_data = {
+            "modules": [
+                {
+                    "id": "MOD1",
+                    "type": "lr-pc",
+                    "name": "Pump",
+                    "programs": [
+                        {
+                            "programCharacteristics": {
+                                "programType": FILTRATION_PROGRAM_TYPE,
+                                "mode": MODE_AUTO,
+                            },
+                            "temperatureSchedules": [
+                                {"thresholds": [[{"start": 660, "end": 960}]]}
+                            ],
+                        }
+                    ],
+                }
+            ],
+            "pool": [{"index": 0, "value": 1}],
+        }
+        pool_data = parser.parse_data(json_data, "P1", "A1", "R1")
+        attrs = pool_data.modules["MOD1"].pool_status["0"].extra_attributes
+        assert "schedule_start" not in attrs
+
+    def test_parse_remaining_time(self):
+        """Test remaining filtration time parsing."""
+        parser = IndygoParser()
+        json_data = {
+            "modules": [
+                {
+                    "id": "MOD1",
+                    "type": "lr-pc",
+                    "name": "Pump",
+                    "programs": [
+                        {
+                            "programCharacteristics": {
+                                "programType": FILTRATION_PROGRAM_TYPE,
+                                "mode": MODE_AUTO,
+                            },
+                        }
+                    ],
+                }
+            ],
+            "pool": [{"index": 0, "value": 1, "time": "01:30", "tempRef": 2}],
+        }
+        pool_data = parser.parse_data(json_data, "P1", "A1", "R1")
+        mod = pool_data.modules["MOD1"]
+        assert "filtration_remaining_time" in mod.sensors
+        expected_minutes = 90
+        assert mod.sensors["filtration_remaining_time"].value == expected_minutes
+
+    def test_parse_remaining_time_zero(self):
+        """Test remaining time when filtration is done."""
+        parser = IndygoParser()
+        json_data = {
+            "modules": [
+                {
+                    "id": "MOD1",
+                    "type": "lr-pc",
+                    "name": "Pump",
+                    "programs": [
+                        {
+                            "programCharacteristics": {
+                                "programType": FILTRATION_PROGRAM_TYPE,
+                                "mode": MODE_AUTO,
+                            },
+                        }
+                    ],
+                }
+            ],
+            "pool": [{"index": 0, "value": 0, "time": "00:00", "tempRef": 2}],
+        }
+        pool_data = parser.parse_data(json_data, "P1", "A1", "R1")
+        mod = pool_data.modules["MOD1"]
+        assert mod.sensors["filtration_remaining_time"].value == 0
+
+    def test_minutes_to_time(self):
+        """Test minutes to time conversion."""
+        assert IndygoParser._minutes_to_time(0) == "00:00"
+        assert IndygoParser._minutes_to_time(60) == "01:00"
+        assert IndygoParser._minutes_to_time(660) == "11:00"
+        assert IndygoParser._minutes_to_time(1440) == "24:00"
+        assert IndygoParser._minutes_to_time(90) == "01:30"
+
+    def test_parse_remaining_time_helper(self):
+        """Test _parse_remaining_time helper."""
+        expected_90 = 90
+        expected_165 = 165
+        assert IndygoParser._parse_remaining_time("01:30") == expected_90
+        assert IndygoParser._parse_remaining_time("00:00") == 0
+        assert IndygoParser._parse_remaining_time("02:45") == expected_165
+        assert IndygoParser._parse_remaining_time("invalid") is None
+        assert IndygoParser._parse_remaining_time("") is None
+
+    def test_parse_dialog_timestamp(self):
+        """Test _parse_dialog_timestamp helper."""
+        dt = IndygoParser._parse_dialog_timestamp("2026-03-28T16:28:54Z")
+        assert dt is not None
+        expected_year = 2026
+        expected_month = 3
+        expected_day = 28
+        assert dt.year == expected_year
+        assert dt.month == expected_month
+        assert dt.day == expected_day
+        assert dt.tzinfo is not None
+
+        assert IndygoParser._parse_dialog_timestamp(None) is None
+        assert IndygoParser._parse_dialog_timestamp("not-a-date") is None
+
     def test_parse_data_edge_cases(self):
         """Test full data parsing edge cases."""
         parser = IndygoParser()
