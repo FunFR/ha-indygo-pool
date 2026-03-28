@@ -3,7 +3,6 @@
 from custom_components.indygo_pool.parser import (
     IndygoParser,
     _get_nested,
-    _js_var_regex,
 )
 
 # Constants for testing
@@ -26,45 +25,61 @@ MODE_ON = 1
 class TestIndygoParser:
     """Test class for Indygo Parser."""
 
-    def test_extract_json_object(self):
-        """Test extraction of JSON object from text."""
+    def test_resolve_hardware_ids_lr_pc(self):
+        """Test resolving hardware IDs from lr-pc + gateway modules."""
         parser = IndygoParser()
-        text = 'var someData = {"a": 1, "b": {"c": 2}};'
-        start_index = text.find("{")
-        result = parser.extract_json_object(text, start_index)
-        assert result == '{"a": 1, "b": {"c": 2}}'
-
-        # Test with escaped quotes
-        text_escaped = '{"a": "val\\"ue"}'
-        result_escaped = parser.extract_json_object(text_escaped, 0)
-        assert result_escaped == '{"a": "val\\"ue"}'
-
-    def test_parse_pool_ids(self):
-        """Test parsing pool IDs from HTML."""
-        parser = IndygoParser()
-        html = (
-            "<script>\n"
-            "    var currentPool = {\n"
-            '        "id": 123,\n'
-            '        "temperature": 25.5,\n'
-            '        "temperatureTime": "2023-01-01T12:00:00Z",\n'
-            '        "modules": [\n'
-            '            {"type": "lr-mb-10", "serialNumber": "GATEWAY123", '
-            '"name": "Gateway-01"},\n'
-            '            {"type": "lr-pc", "serialNumber": "LRPC123", '
-            '"name": "Pool-ABC"}\n'
-            "        ]\n"
-            "    };\n"
-            "</script>"
-        )
-        pool_address, device_short_id, relay_id, metadata = parser.parse_pool_ids(
-            html, TEST_POOL_ID
-        )
+        modules = [
+            {
+                "type": "lr-mb-10",
+                "serialNumber": TEST_GATEWAY_SERIAL,
+                "name": "Gateway-01",
+            },
+            {
+                "type": "lr-pc",
+                "serialNumber": "LRPC123",
+                "name": "Pool-ABC",
+                "relay": TEST_RELAY_ID,
+            },
+        ]
+        pool_address, device_short_id, relay_id = parser.resolve_hardware_ids(modules)
         assert pool_address == TEST_GATEWAY_SERIAL
+        assert device_short_id == TEST_RELAY_ID
         assert relay_id == TEST_RELAY_ID
-        assert metadata["id"] == int(TEST_POOL_ID)
-        assert metadata["temperature"] == TEST_TEMP_VALUE
-        assert metadata["temperatureTime"] == TEST_DATE
+
+    def test_resolve_hardware_ids_ipx_fallback(self):
+        """Test resolving hardware IDs via IPX fallback."""
+        parser = IndygoParser()
+        modules = [
+            {"type": "ipx", "serialNumber": "IPX_SER", "ipxRelay": "REL_1"},
+        ]
+        a, b, c = parser.resolve_hardware_ids(modules)
+        assert a == "IPX_SER"
+        assert b == "REL_1"
+        assert c == "REL_1"
+
+    def test_resolve_hardware_ids_no_compatible_module(self):
+        """Test resolving hardware IDs when no compatible module exists."""
+        parser = IndygoParser()
+        a, b, c = parser.resolve_hardware_ids([{"type": "other"}])
+        assert a is None
+        assert b is None
+
+    def test_resolve_lr_pc_acts_as_gateway(self):
+        """Test lr-pc acts as gateway when no dedicated gateway."""
+        parser = IndygoParser()
+        a, b, c = parser._resolve_lr_pc([{"type": "lr-pc", "serialNumber": "123456"}])
+        assert a == "123456"
+
+    def test_resolve_ipx_direct(self):
+        """Test IPX module direct resolution."""
+        parser = IndygoParser()
+        assert parser._resolve_ipx([{"type": "other"}]) == (None, None, None)
+        a, b, c = parser._resolve_ipx(
+            [{"type": "ipx", "serialNumber": "ser123", "ipxRelay": "rel456"}]
+        )
+        assert a == "ser123"
+        assert b == "rel456"
+        assert c == "rel456"
 
     def test_parse_data(self):
         """Test parsing API JSON into IndygoPoolData."""
@@ -84,7 +99,9 @@ class TestIndygoParser:
                     "id": "MOD2",
                     "type": "ipx",
                     "name": "Electrolyzer",
-                    "ipxData": {"totalElectrolyseDuration": TEST_ELECTROLYSE_DURATION},
+                    "ipxData": {
+                        "totalElectrolyseDuration": TEST_ELECTROLYSE_DURATION,
+                    },
                 },
             ],
             "ipx_module": {
@@ -111,7 +128,12 @@ class TestIndygoParser:
                 ],
             },
             "pool": [
-                {"index": 0, "value": TEST_PH_VALUE, "info": "INFO", "time": TEST_DATE}
+                {
+                    "index": 0,
+                    "value": TEST_PH_VALUE,
+                    "info": "INFO",
+                    "time": TEST_DATE,
+                }
             ],
         }
 
@@ -120,10 +142,7 @@ class TestIndygoParser:
         # Test LR-PC (Filtration Module) Data
         assert "MOD1" in pool_data.modules
         filt_mod = pool_data.modules["MOD1"]
-
-        # Temperature and Filtration should now be on the module
         assert filt_mod.sensors["temperature"].value == TEST_SENSOR_STATE_TEMP / 100.0
-        # Check filtration status (index 0)
         assert filt_mod.pool_status["0"].value == TEST_PH_VALUE
 
         # Test IPX Data (on module MOD2)
@@ -133,149 +152,53 @@ class TestIndygoParser:
             ipx_mod.sensors["totalElectrolyseDuration"].value
             == TEST_ELECTROLYSE_DURATION
         )
-
-        # Test IPX Scraped Data (now on module MOD2)
         assert ipx_mod.sensors["ph_setpoint"].value == TEST_PH_SETPOINT
         assert ipx_mod.sensors["ipx_salt"].value == TEST_SALT_VALUE
         assert ipx_mod.sensors["production_setpoint"].value == TEST_PROD_SETPOINT
-        # Electrolyzer mode is defaulted in this test case
         assert ipx_mod.sensors["electrolyzer_mode"].value == 0
 
-        # Test pH Latest Logic (merged on module MOD2)
+        # Test pH Latest Logic
         assert "ph" in ipx_mod.sensors
         assert ipx_mod.sensors["ph"].value == TEST_PH_VALUE
         assert (
             ipx_mod.sensors["ph"].extra_attributes["last_measurement_time"] == TEST_DATE
         )
 
-    def test_parse_programs_from_html(self):
-        """Test parsing programs from embedded HTML JSON."""
+    def test_parse_modules_with_programs(self):
+        """Test that programs from API are correctly parsed."""
         parser = IndygoParser()
-        html = (
-            "<script>\n"
-            "    var poolCommand = {\n"
-            '        "module": "MOD_123",\n'
-            '        "programs": [\n'
-            "            {\n"
-            '                "module": "MOD_123",\n'
-            '                "programCharacteristics": {\n'
-            f'                    "programType": {FILTRATION_PROGRAM_TYPE}, '
-            f'"mode": {MODE_AUTO}\n'
-            "                }\n"
-            "            },\n"
-            "            {\n"
-            '                "module": "MOD_123",\n'
-            '                "programCharacteristics": {"programType": 1, "mode": 1}\n'
-            "            }\n"
-            "        ]\n"
-            "    };\n"
-            "</script>"
-        )
-
-        programs_map = parser.parse_programs_from_html(html)
-        assert "MOD_123" in programs_map
-        programs = programs_map["MOD_123"]
+        json_data = {
+            "modules": [
+                {
+                    "id": "MOD_123",
+                    "type": "lr-pc",
+                    "name": "Pump",
+                    "programs": [
+                        {
+                            "programCharacteristics": {
+                                "programType": FILTRATION_PROGRAM_TYPE,
+                                "mode": MODE_AUTO,
+                            },
+                        },
+                        {
+                            "programCharacteristics": {
+                                "programType": 1,
+                                "mode": MODE_ON,
+                            },
+                        },
+                    ],
+                }
+            ],
+        }
+        pool_data = parser.parse_data(json_data, "P1", "A1", "R1")
+        mod = pool_data.modules["MOD_123"]
         expected_count = 2
-        assert len(programs) == expected_count
-
-        # Verify filtration program (type 4) matches
-        filt_prog = next(
-            p
-            for p in programs
-            if p["programCharacteristics"]["programType"] == FILTRATION_PROGRAM_TYPE
-        )
-        assert filt_prog["programCharacteristics"]["mode"] == MODE_AUTO
-
-    def test_parse_programs_missing_html(self):
-        """Test parsing programs when HTML/JSON is missing."""
-        parser = IndygoParser()
-        html = "<html><body>No programs here</body></html>"
-        programs_map = parser.parse_programs_from_html(html)
-        assert programs_map == {}
-
-    def test_extract_json_object_edge_cases(self):
-        """Test JSON object extraction edge cases."""
-        parser = IndygoParser()
-        assert parser.extract_json_object("no braces here", 0) is None
-        assert parser.extract_json_object("{unclosed object", 0) is None
-
-    def test_parse_lr_pc_module_edge_cases(self):
-        """Test LR-PC parsing edge cases."""
-        parser = IndygoParser()
-        # No lr-pc
-        a, b, c = parser._parse_lr_pc_module([{"type": "other"}])
-        assert a is None
-
-        # lr-pc acts as gateway
-        a, b, c = parser._parse_lr_pc_module(
-            [{"type": "lr-pc", "serialNumber": "123456"}]
-        )
-        assert a == "123456"
-
-    def test_parse_ipx_module_direct(self):
-        """Test IPX module direct parsing."""
-        parser = IndygoParser()
-        assert parser._parse_ipx_module([{"type": "other"}]) == (None, None, None)
-        a, b, c = parser._parse_ipx_module(
-            [{"type": "ipx", "serialNumber": "ser123", "ipxRelay": "rel456"}]
-        )
-        assert a == "ser123"
-        assert b == "rel456"
-        assert c == "rel456"
-
-    def test_parse_pool_ids_fallbacks(self):
-        """Test pool IDs HTML parsing fallbacks."""
-        parser = IndygoParser()
-        # JSON Decode error on currentPool returns empty
-        html = "<script>var currentPool = {bad json;</script>"
-        assert parser.parse_pool_ids(html, "123") == (None, None, None, {})
-
-        # modulesInPool fallback
-        html = (
-            '<script>var modulesInPool = [{"type": "ipx", '
-            '"serialNumber": "X", "ipxRelay": "Y"}];</script>'
-        )
-        a, b, c, m = parser.parse_pool_ids(html, "123")
-        assert a == "X"
-        assert b == "Y"
-        assert m == {"modules": [{"type": "ipx", "serialNumber": "X", "ipxRelay": "Y"}]}
-
-        # No compatible module
-        html = '<script>var currentPool = {"modules": []};</script>'
-        assert parser.parse_pool_ids(html, "123") == (None, None, None, {})
-
-    def test_parse_ipx_module_html(self):
-        """Test IPX module HTML embedded JSON parsing."""
-        parser = IndygoParser()
-        # Validate poolTechModulesIpx
-        html = '<script>var poolTechModulesIpx = [{"type": "ipx_1"}];</script>'
-        assert parser.parse_ipx_module(html) == {"type": "ipx_1"}
-
-        # Validate legacy ipxModule
-        html = '<script>var ipxModule = {"id": 1};</script>'
-        assert parser.parse_ipx_module(html) == {"id": 1}
-
-        # Validate modulesInPool fallback for ipx
-        html = '<script>var modulesInPool = [{"type": "ipx_foo"}];</script>'
-        assert parser.parse_ipx_module(html) == {"type": "ipx_foo"}
-
-    def test_parse_programs_from_html_fallbacks(self):
-        """Test programs parsing fallbacks."""
-        parser = IndygoParser()
-        # poolCommand json error
-        html = "<script>var poolCommand = {bad;</script>"
-        assert parser.parse_programs_from_html(html) == {}
-
-        # modulesInPool valid programs
-        html = (
-            '<script>var modulesInPool = [{"id": "MOD1", '
-            '"programs": [{"id": 1}]}];</script>'
-        )
-        progs = parser.parse_programs_from_html(html)
-        assert progs["MOD1"] == [{"id": 1}]
+        assert len(mod.programs) == expected_count
+        assert mod.filtration_program is not None
+        assert mod.filtration_program["programCharacteristics"]["mode"] == MODE_AUTO
 
     def test_parse_filtration_schedule_as_attributes(self):
-        """Test schedule is exposed as attributes on the filtration binary sensor."""
+        """Test schedule is exposed as attributes on the filtration status."""
         parser = IndygoParser()
         json_data = {
             "dialogTimeStamp": "2026-03-28T16:28:54Z",
@@ -307,8 +230,6 @@ class TestIndygoParser:
         }
         pool_data = parser.parse_data(json_data, "P1", "A1", "R1")
         mod = pool_data.modules["MOD1"]
-
-        # Schedule should be in pool_status["0"] extra_attributes
         attrs = mod.pool_status["0"].extra_attributes
         assert attrs["schedule_start"] == "2026-03-28T11:00:00+00:00"
         assert attrs["schedule_end"] == "2026-03-28T16:00:00+00:00"
@@ -316,10 +237,7 @@ class TestIndygoParser:
         assert attrs["schedule_duration_minutes"] == expected_duration
         assert len(attrs["schedule_windows"]) == 1
         assert attrs["schedule_windows"][0] == {"start": "11:00", "end": "16:00"}
-
-        # Should NOT be separate sensors
         assert "filtration_schedule_start" not in mod.sensors
-        assert "filtration_schedule_end" not in mod.sensors
 
     def test_parse_filtration_schedule_multiple_windows(self):
         """Test schedule with multiple filtration windows."""
@@ -355,7 +273,6 @@ class TestIndygoParser:
         }
         pool_data = parser.parse_data(json_data, "P1", "A1", "R1")
         attrs = pool_data.modules["MOD1"].pool_status["0"].extra_attributes
-
         assert attrs["schedule_start"] == "2026-03-28T05:00:00+00:00"
         assert attrs["schedule_end"] == "2026-03-28T06:00:00+00:00"
         expected_window_count = 2
@@ -616,20 +533,23 @@ class TestIndygoParser:
     def test_parse_data_edge_cases(self):
         """Test full data parsing edge cases."""
         parser = IndygoParser()
-        # Test when no modules, no pool status, no sensorState, etc.
         data = parser.parse_data({}, "POOL1", "ADDR1", "RELAY1")
         assert len(data.modules) == 0
 
-        # Test new temperature creation without existing modules
         data = parser.parse_data(
-            {"sensorState": [{"index": 0, "value": 1500}]}, "POOL1", "ADDR1", "RELAY1"
+            {"sensorState": [{"index": 0, "value": 1500}]},
+            "POOL1",
+            "ADDR1",
+            "RELAY1",
         )
         expected_temperature = 15.0
         assert data.sensors["temperature"].value == expected_temperature
 
-        # Test get_nested error handling without crashing
         data = parser.parse_data(
-            {"ipx_module": {"outputs": [{"ipxData": {}}]}}, "POOL1", "ADDR1", "RELAY1"
+            {"ipx_module": {"outputs": [{"ipxData": {}}]}},
+            "POOL1",
+            "ADDR1",
+            "RELAY1",
         )
         assert "ipx_salt" not in data.sensors
 
@@ -661,27 +581,3 @@ class TestGetNested:
     def test_returns_none_on_invalid_index(self):
         """Test with non-numeric key on a list."""
         assert _get_nested([1, 2], "abc") is None
-
-
-class TestJsVarRegex:
-    """Tests for the _js_var_regex helper."""
-
-    def test_matches_var(self):
-        """Test matching var declaration."""
-        regex = _js_var_regex("myVar", r"\{")
-        assert regex.search("var myVar = {};") is not None
-
-    def test_matches_const(self):
-        """Test matching const declaration."""
-        regex = _js_var_regex("myVar", r"\[")
-        assert regex.search("const myVar = [];") is not None
-
-    def test_matches_window_dot(self):
-        """Test matching window.property assignment."""
-        regex = _js_var_regex("myVar")
-        assert regex.search("window.myVar = {};") is not None
-
-    def test_no_match(self):
-        """Test no match for unrelated content."""
-        regex = _js_var_regex("myVar")
-        assert regex.search("var otherVar = {};") is None

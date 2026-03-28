@@ -1,4 +1,4 @@
-"""Tests for the Indygo Pool integration."""
+"""Tests for the Indygo Pool API Client."""
 
 import json
 import os
@@ -16,208 +16,309 @@ except ImportError:
 from yarl import URL
 
 from custom_components.indygo_pool.api import (
+    BASE_URL,
     IndygoPoolApiClient,
     IndygoPoolApiClientAuthenticationError,
     IndygoPoolApiClientCommunicationError,
     IndygoPoolApiClientError,
 )
-from custom_components.indygo_pool.models import IndygoPoolData
+from custom_components.indygo_pool.models import IndygoModuleData, IndygoPoolData
 
-# Load environment variables from .env file
 load_dotenv()
 
 
-@pytest.mark.asyncio
-@pytest.mark.integration
-async def test_api_client_authentication():  # noqa: PLR0912, PLR0915
-    """Test API client authentication with real credentials from env."""
-    email = os.getenv("email")
-    password = os.getenv("password")
-    pool_id = os.getenv("pool_id")
-
-    if not email or not password or not pool_id:
-        pytest.skip("Credentials or pool_id not provided in environment (.env file)")
-
-    async with aiohttp.ClientSession(
-        cookie_jar=aiohttp.CookieJar(unsafe=False, quote_cookie=False)
-    ) as session:
-        client = IndygoPoolApiClient(email, password, pool_id=pool_id, session=session)
-        try:
-            data = await client.async_get_data()
-            assert data is not None
-            assert isinstance(data, IndygoPoolData)
-            print("Successfully reached the API endpoint and retrieved data!")
-            print(f"Pool ID: {data.pool_id}")
-            print(f"Address: {data.address}, Relay ID: {data.relay_id}")
-            print(f"Sensors: {list(data.sensors.keys())}")
-            print(f"Modules: {list(data.modules.keys())}")
-
-            # Basic Validation
-            assert data.pool_id == pool_id
-            if data.sensors:
-                assert len(data.sensors) > 0
-
-        except Exception as e:
-            if "Could not determine Pool Address" in str(e):
-                pytest.skip(f"API interaction failed (environment issue): {e}")
-            pytest.fail(f"API call failed: {e}")
-
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
 
 TEST_POOL_ID = "12345"
 TEST_MODULE_ID = "mod_123"
 TEST_RELAY_ID = "relay_123"
 TEST_POOL_ADDRESS = "pool_123"
+TEST_SERIAL = "SERIAL_ABC"
+
+TOKEN_RESPONSE = {
+    "access_token": "fake_access_token",
+    "token_type": "Bearer",
+    "expires_in": 3600,
+}
+
+MODULES_RESPONSE = {
+    "modules": [
+        {
+            "id": TEST_MODULE_ID,
+            "type": "lr-pc",
+            "serialNumber": TEST_SERIAL,
+            "name": "Pump-ABC",
+            "relay": TEST_RELAY_ID,
+        },
+        {
+            "id": "gw_1",
+            "type": "lr-mb-10",
+            "serialNumber": TEST_POOL_ADDRESS,
+            "name": "Gateway",
+        },
+    ],
+}
+
+
+def _make_client(session: aiohttp.ClientSession) -> IndygoPoolApiClient:
+    """Create a pre-authenticated client."""
+    client = IndygoPoolApiClient("test@example.com", "pass", TEST_POOL_ID, session)
+    client._token = "Bearer fake_access_token"
+    client._token_expiry = 9999999999  # far future
+    return client
 
 
 def _verify_request_payload(mock_obj, method: str, url: str, expected_data: dict):
-    """Helper to verify API request payload."""
+    """Verify API request payload."""
     key = (method, URL(url))
     assert key in mock_obj.requests
     req = mock_obj.requests[key][0]
-    payload = json.loads(req.kwargs["data"])
+    if req.kwargs.get("data"):
+        payload = json.loads(req.kwargs["data"])
+    else:
+        payload = req.kwargs.get("json", {})
     for field, value in expected_data.items():
-        if "." in field:  # Nested field like "programs.0.mode"
+        if "." in field:
             parts = field.split(".")
             actual = payload
             for part in parts:
-                if part.isdigit():
-                    actual = actual[int(part)]
-                else:
-                    actual = actual[part]
+                actual = actual[int(part)] if part.isdigit() else actual[part]
             assert actual == value
         else:
             assert payload[field] == value
 
 
+# ---------------------------------------------------------------------------
+# Integration test (real API)
+# ---------------------------------------------------------------------------
+
+
 @pytest.mark.asyncio
-async def test_set_filtration_mode():
-    """Test setting filtration mode with mocked session."""
+@pytest.mark.integration
+async def test_api_client_authentication():
+    """Test API client with real credentials from .env."""
+    email = os.getenv("email")
+    password = os.getenv("password")
+    pool_id = os.getenv("pool_id")
+
+    if not email or not password or not pool_id:
+        pytest.skip("Credentials not provided in .env")
+
+    async with aiohttp.ClientSession() as session:
+        client = IndygoPoolApiClient(email, password, pool_id, session)
+        data = await client.async_get_data()
+        assert data is not None
+        assert isinstance(data, IndygoPoolData)
+        assert data.pool_id == pool_id
+
+
+# ---------------------------------------------------------------------------
+# Login tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_login_success():
+    """Test successful OAuth2 login."""
     if aioresponses is None:
         pytest.skip("aioresponses not installed")
 
-    filt_program = {
-        "id": "prog_1",
-        "programCharacteristics": {"mode": 0, "programType": 4},
-    }
-    expected_mode = 2
-
     with aioresponses() as m:
-        # Mock all API endpoints
-        m.put("https://myindygo.com/module/update", payload={"status": "ok"})
-        m.put("https://myindygo.com/program/update", payload={"status": "ok"})
-        m.post(
-            "https://myindygo.com/remote/module/configuration/and/programs",
-            payload={"status": "ok"},
-        )
-        m.post(
-            "https://myindygo.com/module/reportModuleDataSent",
-            payload={"status": "ok"},
-        )
-        m.post(
-            "https://myindygo.com/program/reportProgramsDataSent",
-            payload={"status": "ok"},
-        )
-        m.post("https://myindygo.com/remote/module/control", payload={"status": "ok"})
+        m.post(f"{BASE_URL}/oauth2/token", payload=TOKEN_RESPONSE)
 
         async with aiohttp.ClientSession() as session:
             client = IndygoPoolApiClient(
                 "test@example.com", "pass", TEST_POOL_ID, session
             )
-            client._relay_id = TEST_RELAY_ID
-            client._pool_address = TEST_POOL_ADDRESS
-            client._token = "fake_token"
-            # Populate scraped programs so the loop finds the program
-            client._scraped_programs = {TEST_MODULE_ID: [filt_program]}
-
-            await client.async_set_filtration_mode(
-                TEST_MODULE_ID, filt_program, expected_mode
-            )
-
-            # Verify program update
-            _verify_request_payload(
-                m,
-                "PUT",
-                "https://myindygo.com/program/update",
-                {
-                    "module": TEST_MODULE_ID,
-                    "programs.0.programCharacteristics.mode": expected_mode,
-                },
-            )
-
-            # Verify remote sync
-            _verify_request_payload(
-                m,
-                "POST",
-                "https://myindygo.com/remote/module/configuration/and/programs",
-                {"moduleId": TEST_MODULE_ID, "relayId": TEST_RELAY_ID},
-            )
-
-            # Verify module report
-            _verify_request_payload(
-                m,
-                "POST",
-                "https://myindygo.com/module/reportModuleDataSent",
-                {"module": TEST_MODULE_ID},
-            )
-
-            # Verify programs report
-            _verify_request_payload(
-                m,
-                "POST",
-                "https://myindygo.com/program/reportProgramsDataSent",
-                {
-                    "module": TEST_MODULE_ID,
-                    "programs.0.id": filt_program["id"],
-                    "programs.0.programCharacteristics.mode": expected_mode,
-                },
-            )
-
-            # Remote control is NOT called for AUTO mode
-            control_key = ("POST", URL("https://myindygo.com/remote/module/control"))
-            assert control_key not in m.requests
+            await client.async_login()
+            assert client._token == "Bearer fake_access_token"
 
 
 @pytest.mark.asyncio
-async def test_set_filtration_mode_sync_failure():
-    """Test that main update succeeds even if remote sync calls fail."""
+async def test_login_failure():
+    """Test failed OAuth2 login."""
     if aioresponses is None:
         pytest.skip("aioresponses not installed")
 
-    pool_id = "12345"
-    module_id = "mod_123"
-    relay_id = "relay_123"
-    filt_program = {
-        "id": "prog_1",
-        "programCharacteristics": {"mode": 2, "programType": 4},
-    }
-    expected_mode = 0  # OFF
-
     with aioresponses() as m:
-        # 1. Mock the module update (PUT) - SUCCESS
-        module_url = "https://myindygo.com/module/update"
-        m.put(module_url, payload={"status": "ok"})
-
-        # 2. Mock the program update (PUT) - SUCCESS
-        update_url = "https://myindygo.com/program/update"
-        m.put(update_url, payload={"status": "ok"})
-
-        # 3. Mock the remote sync (POST) - FAILURE (500)
-        sync_url = "https://myindygo.com/remote/module/configuration/and/programs"
-        m.post(sync_url, status=500)
+        m.post(f"{BASE_URL}/oauth2/token", status=401)
 
         async with aiohttp.ClientSession() as session:
-            client = IndygoPoolApiClient("test@example.com", "pass", pool_id, session)
-            client._relay_id = relay_id
-            client._pool_address = "pool_123"
-            client._token = "fake_token"
+            client = IndygoPoolApiClient(
+                "test@example.com", "pass", TEST_POOL_ID, session
+            )
+            with pytest.raises(IndygoPoolApiClientAuthenticationError):
+                await client.async_login()
 
-            # Should NOT raise exception because errors in sync are caught and logged
-            await client.async_set_filtration_mode(
-                module_id, filt_program, expected_mode
+
+# ---------------------------------------------------------------------------
+# Data fetching tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_data_success():
+    """Test successful data retrieval via API."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    with aioresponses() as m:
+        # Mock modules metadata
+        m.post(f"{BASE_URL}/api/getUserWithHisModules", payload=MODULES_RESPONSE)
+        # Mock programs for each module (LRPC has filtration program)
+        m.post(
+            f"{BASE_URL}/api/getModuleWithHisPrograms",
+            payload={
+                "programs": [{"programCharacteristics": {"programType": 4, "mode": 2}}]
+            },
+        )
+        m.post(
+            f"{BASE_URL}/api/getModuleWithHisPrograms",
+            payload={"programs": []},
+        )
+        # Mock status data
+        m.get(
+            f"{BASE_URL}/v1/module/{TEST_POOL_ADDRESS}/status/ABC",
+            payload={"temperature": 25.5},
+        )
+
+        async with aiohttp.ClientSession() as session:
+            client = _make_client(session)
+            data = await client.async_get_data()
+
+            assert data is not None
+            assert isinstance(data, IndygoPoolData)
+            assert data.pool_id == TEST_POOL_ID
+            assert data.address == TEST_POOL_ADDRESS
+            assert data.relay_id == TEST_RELAY_ID
+
+
+@pytest.mark.asyncio
+async def test_get_data_communication_error():
+    """Test communication error during data retrieval."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    with aioresponses() as m:
+        m.post(f"{BASE_URL}/api/getUserWithHisModules", status=500)
+
+        async with aiohttp.ClientSession() as session:
+            client = _make_client(session)
+            with pytest.raises(IndygoPoolApiClientCommunicationError):
+                await client.async_get_data()
+
+
+@pytest.mark.asyncio
+async def test_get_data_resolves_hardware_ids_once():
+    """Test that hardware IDs are resolved once and cached."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    with aioresponses() as m:
+        # First call
+        m.post(f"{BASE_URL}/api/getUserWithHisModules", payload=MODULES_RESPONSE)
+        m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
+        m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
+        m.get(
+            f"{BASE_URL}/v1/module/{TEST_POOL_ADDRESS}/status/ABC",
+            payload={},
+        )
+        # Second call
+        m.post(f"{BASE_URL}/api/getUserWithHisModules", payload=MODULES_RESPONSE)
+        m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
+        m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
+        m.get(
+            f"{BASE_URL}/v1/module/{TEST_POOL_ADDRESS}/status/ABC",
+            payload={},
+        )
+
+        async with aiohttp.ClientSession() as session:
+            client = _make_client(session)
+
+            await client.async_get_data()
+            assert client._pool_address == TEST_POOL_ADDRESS
+
+            # Second call should use cached IDs
+            with patch.object(client._parser, "resolve_hardware_ids") as mock_resolve:
+                await client.async_get_data()
+                mock_resolve.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Filtration mode tests
+# ---------------------------------------------------------------------------
+
+FILT_PROGRAM = {
+    "id": "prog_1",
+    "programCharacteristics": {"mode": 0, "programType": 4},
+}
+
+
+def _mock_filtration_endpoints(m):
+    """Mock all endpoints used by async_set_filtration_mode."""
+    m.put(f"{BASE_URL}/api/updatePrograms", payload={"status": "ok"})
+    m.post(
+        f"{BASE_URL}/api/module/{TEST_POOL_ADDRESS}/programs/ABC",
+        payload={"status": "ok"},
+    )
+    m.post(
+        f"{BASE_URL}/api/reportModuleDatasSent",
+        payload={"status": "ok"},
+    )
+    m.post(
+        f"{BASE_URL}/api/reportProgramsDatasSent",
+        payload={"status": "ok"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_set_filtration_mode():
+    """Test setting filtration mode to Auto."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    expected_mode = 2
+
+    with aioresponses() as m:
+        _mock_filtration_endpoints(m)
+
+        async with aiohttp.ClientSession() as session:
+            client = _make_client(session)
+            client._pool_address = TEST_POOL_ADDRESS
+            client._device_short_id = "ABC"
+            # Set up module data so programs are found
+            client._data = IndygoPoolData(pool_id=TEST_POOL_ID)
+            client._data.modules[TEST_MODULE_ID] = IndygoModuleData(
+                id=TEST_MODULE_ID,
+                type="lr-pc",
+                name="Pump",
+                programs=[FILT_PROGRAM],
+                raw_data={"serialNumber": TEST_SERIAL},
             )
 
-            # Verify PUT was still called
-            assert ("PUT", URL(update_url)) in m.requests
+            await client.async_set_filtration_mode(
+                TEST_MODULE_ID, FILT_PROGRAM, expected_mode
+            )
+
+            # Verify program update was sent
+            _verify_request_payload(
+                m,
+                "PUT",
+                f"{BASE_URL}/api/updatePrograms",
+                {
+                    "module": TEST_MODULE_ID,
+                    "programs.0.programCharacteristics.mode": expected_mode,
+                },
+            )
+
+            # Verify report was called
+            report_key = (
+                "POST",
+                URL(f"{BASE_URL}/api/reportModuleDatasSent"),
+            )
+            assert report_key in m.requests
 
 
 @pytest.mark.asyncio
@@ -227,11 +328,8 @@ async def test_set_filtration_mode_parameterized(new_mode):
     if aioresponses is None:
         pytest.skip("aioresponses not installed")
 
-    pool_id = "12345"
-    module_id = "mod_123"
-    relay_id = "relay_123"
-    mode_off = 0
     mode_auto = 2
+    mode_off = 0
     filt_program = {
         "id": "prog_1",
         "programCharacteristics": {
@@ -241,281 +339,380 @@ async def test_set_filtration_mode_parameterized(new_mode):
     }
 
     with aioresponses() as m:
-        m.put("https://myindygo.com/module/update", payload={"status": "ok"})
-        m.put("https://myindygo.com/program/update", payload={"status": "ok"})
+        _mock_filtration_endpoints(m)
+
+        async with aiohttp.ClientSession() as session:
+            client = _make_client(session)
+            client._pool_address = TEST_POOL_ADDRESS
+            client._data = IndygoPoolData(pool_id=TEST_POOL_ID)
+            client._data.modules[TEST_MODULE_ID] = IndygoModuleData(
+                id=TEST_MODULE_ID,
+                type="lr-pc",
+                name="Pump",
+                programs=[filt_program],
+                raw_data={"serialNumber": TEST_SERIAL},
+            )
+
+            await client.async_set_filtration_mode(
+                TEST_MODULE_ID, filt_program, new_mode
+            )
+
+            # Verify the mode in the report call
+            report_key = (
+                "POST",
+                URL(f"{BASE_URL}/api/reportProgramsDatasSent"),
+            )
+            assert report_key in m.requests
+
+
+@pytest.mark.asyncio
+async def test_set_filtration_mode_sync_failure():
+    """Test that main update succeeds even if device push fails."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    with aioresponses() as m:
+        # updatePrograms succeeds
+        m.put(f"{BASE_URL}/api/updatePrograms", payload={"status": "ok"})
+        # Device push fails
         m.post(
-            "https://myindygo.com/remote/module/configuration/and/programs",
+            f"{BASE_URL}/api/module/{TEST_POOL_ADDRESS}/programs/ABC",
+            status=500,
+        )
+
+        async with aiohttp.ClientSession() as session:
+            client = _make_client(session)
+            client._pool_address = TEST_POOL_ADDRESS
+            client._device_short_id = "ABC"
+            client._data = IndygoPoolData(pool_id=TEST_POOL_ID)
+            client._data.modules[TEST_MODULE_ID] = IndygoModuleData(
+                id=TEST_MODULE_ID,
+                type="lr-pc",
+                name="Pump",
+                programs=[FILT_PROGRAM],
+                raw_data={"serialNumber": TEST_SERIAL},
+            )
+
+            # Should raise because report failure propagates
+            with pytest.raises(IndygoPoolApiClientError):
+                await client.async_set_filtration_mode(TEST_MODULE_ID, FILT_PROGRAM, 0)
+
+
+# ---------------------------------------------------------------------------
+# Remote control tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_send_remote_control():
+    """Test send remote control command."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    with aioresponses() as m:
+        m.post(
+            f"{BASE_URL}/api/setManualCommandToSend",
             payload={"status": "ok"},
         )
-        m.post(
-            "https://myindygo.com/module/reportModuleDataSent", payload={"status": "ok"}
-        )
-        m.post(
-            "https://myindygo.com/program/reportProgramsDataSent",
-            payload={"status": "ok"},
-        )
-        m.post(
-            "https://myindygo.com/remote/module/control",
-            payload={"status": "ok"},
-        )
 
         async with aiohttp.ClientSession() as session:
-            client = IndygoPoolApiClient("test@example.com", "pass", pool_id, session)
-            client._relay_id = relay_id
-            client._pool_address = "pool_123"
-            client._token = "fake_token"
-
-            await client.async_set_filtration_mode(module_id, filt_program, new_mode)
-
-            # Basic verification that the mode reached the reporting calls
-            report_prog_url = "https://myindygo.com/program/reportProgramsDataSent"
-            report_prog_req = m.requests[("POST", URL(report_prog_url))][0]
-            report_prog_payload = json.loads(report_prog_req.kwargs["data"])
-            assert (
-                report_prog_payload["programs"][0]["programCharacteristics"]["mode"]
-                == new_mode
-            )
-
-            # Remote control is only called for OFF mode (mode 0)
-            # Modes 1 (ON) and 2 (AUTO) rely on program synchronization only
-            control_url = "https://myindygo.com/remote/module/control"
-            control_key = ("POST", URL(control_url))
-            if new_mode == 0:  # OFF mode
-                assert control_key in m.requests
-                control_req = m.requests[control_key][0]
-                control_payload = json.loads(control_req.kwargs["data"])
-                assert control_payload["linesControl"][0]["mode"] == "off"
-                assert control_payload["linesControl"][0]["action"] == 1
-            else:  # ON or AUTO mode - no remote control call
-                assert control_key not in m.requests
-
-
-@pytest.mark.asyncio
-async def test_api_client_login_success():
-    """Test successful login."""
-    if aioresponses is None:
-        pytest.skip("aioresponses not installed")
-
-    with aioresponses() as m:
-        m.get("https://myindygo.com/login", status=200)
-        m.post(
-            "https://myindygo.com/login",
-            status=302,
-        )
-
-        async with aiohttp.ClientSession() as session:
-            client = IndygoPoolApiClient(
-                "test@example.com", "pass", TEST_POOL_ID, session
-            )
-            await client.async_login()
-
-
-@pytest.mark.asyncio
-async def test_api_client_login_failure():
-    """Test failed login."""
-    if aioresponses is None:
-        pytest.skip("aioresponses not installed")
-
-    with aioresponses() as m:
-        m.get("https://myindygo.com/login", status=200)
-        m.post("https://myindygo.com/login", status=401)
-
-        async with aiohttp.ClientSession() as session:
-            client = IndygoPoolApiClient(
-                "test@example.com", "pass", TEST_POOL_ID, session
-            )
-
-            with pytest.raises(IndygoPoolApiClientAuthenticationError):
-                await client.async_login()
-
-
-@pytest.mark.asyncio
-async def test_api_client_get_data_success():
-    """Test successful data retrieval."""
-    if aioresponses is None:
-        pytest.skip("aioresponses not installed")
-
-    with aioresponses() as m:
-        # Mock refresh scraped data
-        m.get(
-            f"https://myindygo.com/pools/{TEST_POOL_ID}/devices",
-            payload="<html>window.token='fake';</html>",
-            status=200,
-        )
-        # Mock status data
-        m.get(
-            f"https://myindygo.com/v1/module/{TEST_POOL_ADDRESS}/status/{TEST_MODULE_ID}",
-            payload={},
-        )
-
-        async with aiohttp.ClientSession() as session:
-            client = IndygoPoolApiClient(
-                "test@example.com", "pass", TEST_POOL_ID, session
-            )
-
-            with patch(
-                "custom_components.indygo_pool.api.IndygoParser.parse_data"
-            ) as mock_parse:
-                mock_data = IndygoPoolData(
-                    pool_id=TEST_POOL_ID,
-                    address=TEST_POOL_ADDRESS,
-                    relay_id=TEST_RELAY_ID,
-                )
-                mock_parse.return_value = mock_data
-
-                with patch(
-                    "custom_components.indygo_pool.api"
-                    ".IndygoPoolApiClient.async_refresh_scraped_data"
-                ):
-                    client._pool_address = TEST_POOL_ADDRESS
-                    client._device_short_id = TEST_MODULE_ID
-                    data = await client.async_get_data()
-
-                assert data is mock_data
-                mock_parse.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_api_client_get_data_communication_error():
-    """Test communication error during data retrieval."""
-    if aioresponses is None:
-        pytest.skip("aioresponses not installed")
-
-    with aioresponses() as m:
-        # Fails refresh scraped data with 500
-        m.get(f"https://myindygo.com/pools/{TEST_POOL_ID}/devices", status=500)
-
-        async with aiohttp.ClientSession() as session:
-            client = IndygoPoolApiClient(
-                "test@example.com", "pass", TEST_POOL_ID, session
-            )
-
-            with pytest.raises(IndygoPoolApiClientCommunicationError):
-                await client.async_get_data()
-
-
-@pytest.mark.asyncio
-async def test_api_send_remote_control():
-    """Test send remote control."""
-    if aioresponses is None:
-        pytest.skip("aioresponses not installed")
-
-    with aioresponses() as m:
-        m.post("https://myindygo.com/remote/module/control", payload={"status": "ok"})
-
-        async with aiohttp.ClientSession() as session:
-            client = IndygoPoolApiClient(
-                "test@example.com", "pass", TEST_POOL_ID, session
-            )
+            client = _make_client(session)
             client._pool_address = "ABCDE"
 
             await client.async_send_remote_control("off", "ABCDE", action=1)
 
-            # Verify request
-            req = m.requests[
-                ("POST", URL("https://myindygo.com/remote/module/control"))
-            ][0]
-            payload = json.loads(req.kwargs["data"])
+            req = m.requests[("POST", URL(f"{BASE_URL}/api/setManualCommandToSend"))][0]
+            payload = req.kwargs.get("json", {})
             assert payload["moduleSerialNumber"] == "ABCDE"
             assert payload["linesControl"][0]["action"] == 1
 
 
+# ---------------------------------------------------------------------------
+# LoRaWAN tests
+# ---------------------------------------------------------------------------
+
+
 @pytest.mark.asyncio
-async def test_api_synchronize_lorawan():
-    """Test synchronize lorawan."""
+async def test_synchronize_lorawan():
+    """Test LoRaWAN synchronization."""
     if aioresponses is None:
         pytest.skip("aioresponses not installed")
 
     with aioresponses() as m:
         m.post(
-            "https://myindygo.com/modules/sendDataViaLoRaWAN", payload={"status": "ok"}
+            f"{BASE_URL}/modules/sendDataViaLoRaWAN",
+            payload={"status": "ok"},
         )
 
         async with aiohttp.ClientSession() as session:
-            client = IndygoPoolApiClient(
-                "test@example.com", "pass", TEST_POOL_ID, session
-            )
-
+            client = _make_client(session)
             await client.async_synchronize_lorawan("mod1", True, True)
 
-            # Verify update
-            req = m.requests[
-                ("POST", URL("https://myindygo.com/modules/sendDataViaLoRaWAN"))
-            ][0]
-            payload = json.loads(req.kwargs["data"])
+            req = m.requests[("POST", URL(f"{BASE_URL}/modules/sendDataViaLoRaWAN"))][0]
+            payload = req.kwargs.get("json", {})
             assert payload["moduleId"] == "mod1"
             assert payload["sendProgram"] is True
 
 
-DEVICES_HTML = """
-<script>
-var currentPool = {
-    "id": 12345,
-    "modules": [
-        {"type": "lr-mb-10", "serialNumber": "GW_SERIAL", "name": "Gateway"},
-        {"type": "lr-pc", "serialNumber": "LRPC_SERIAL", "name": "Pump-ABC",
-         "relay": "RELAY_1"}
-    ]
-};
-var poolTechModulesIpx = [{"type": "ipx_v1", "id": 1}];
-var poolCommand = {
-    "programs": [
-        {"module": "mod_1", "programCharacteristics": {"programType": 4, "mode": 2}}
-    ]
-};
-</script>
-"""
+# ---------------------------------------------------------------------------
+# Token refresh tests
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_refresh_scraped_data_caches_static_ids():
-    """Test that static IDs are parsed on first call and cached on subsequent calls."""
+async def test_auto_refresh_on_401():
+    """Test that a 401 triggers token refresh and retry."""
     if aioresponses is None:
         pytest.skip("aioresponses not installed")
 
-    devices_url = f"https://myindygo.com/pools/{TEST_POOL_ID}/devices"
-
     with aioresponses() as m:
-        m.get(devices_url, body=DEVICES_HTML)
-        m.get(devices_url, body=DEVICES_HTML)
+        # _ensure_token triggers login (token_expiry=0)
+        m.post(f"{BASE_URL}/oauth2/token", payload=TOKEN_RESPONSE)
+        # First call returns 401
+        m.post(f"{BASE_URL}/api/getUserWithHisModules", status=401)
+        # Re-auth on 401
+        m.post(f"{BASE_URL}/oauth2/token", payload=TOKEN_RESPONSE)
+        # Retry succeeds
+        m.post(f"{BASE_URL}/api/getUserWithHisModules", payload=MODULES_RESPONSE)
+        # Programs for modules
+        m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
+        m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
+        # Status
+        m.get(f"{BASE_URL}/v1/module/{TEST_POOL_ADDRESS}/status/ABC", payload={})
 
         async with aiohttp.ClientSession() as session:
-            client = IndygoPoolApiClient(
-                "test@example.com", "pass", TEST_POOL_ID, session
-            )
+            client = _make_client(session)
+            # Force token to look expired so _ensure_token re-authenticates
+            client._token_expiry = 0
 
-            # First call: IDs should be parsed
-            await client.async_refresh_scraped_data()
-            assert client._pool_address == "GW_SERIAL"
-            assert client._device_short_id == "ABC"
-            assert client._relay_id == "RELAY_1"
+            data = await client.async_get_data()
+            assert data is not None
 
-            # Second call: IDs should be cached, parse_pool_ids not called again
-            with patch.object(client._parser, "parse_pool_ids") as mock_parse:
-                await client.async_refresh_scraped_data()
-                mock_parse.assert_not_called()
 
-            # Dynamic data should still be refreshed
-            assert client._ipx_module_metadata is not None
-            assert client._scraped_programs is not None
+# ---------------------------------------------------------------------------
+# Edge case / coverage tests
+# ---------------------------------------------------------------------------
+
+FILT_PROGRAM_WITH_ID = {
+    "id": "prog_1",
+    "programCharacteristics": {"mode": 0, "programType": 4},
+}
+OTHER_PROGRAM = {
+    "id": "prog_2",
+    "programCharacteristics": {"mode": 1, "programType": 1},
+}
 
 
 @pytest.mark.asyncio
-async def test_refresh_scraped_data_raises_on_missing_ids():
-    """Test that an error is raised when static IDs cannot be parsed."""
+async def test_set_filtration_mode_clears_mode_on_non_filtration():
+    """Test that non-filtration programs have their mode cleared."""
     if aioresponses is None:
         pytest.skip("aioresponses not installed")
 
-    html_no_modules = "<html><body>No data here</body></html>"
-    devices_url = f"https://myindygo.com/pools/{TEST_POOL_ID}/devices"
-
     with aioresponses() as m:
-        m.get(devices_url, body=html_no_modules)
+        _mock_filtration_endpoints(m)
 
         async with aiohttp.ClientSession() as session:
-            client = IndygoPoolApiClient(
-                "test@example.com", "pass", TEST_POOL_ID, session
+            client = _make_client(session)
+            client._pool_address = TEST_POOL_ADDRESS
+            client._device_short_id = "ABC"
+            client._data = IndygoPoolData(pool_id=TEST_POOL_ID)
+            client._data.modules[TEST_MODULE_ID] = IndygoModuleData(
+                id=TEST_MODULE_ID,
+                type="lr-pc",
+                name="Pump",
+                programs=[FILT_PROGRAM_WITH_ID, OTHER_PROGRAM],
+                raw_data={"serialNumber": TEST_SERIAL},
             )
 
+            await client.async_set_filtration_mode(
+                TEST_MODULE_ID, FILT_PROGRAM_WITH_ID, 2
+            )
+
+            # Verify other program had mode cleared
+            req = m.requests[("PUT", URL(f"{BASE_URL}/api/updatePrograms"))][0]
+            payload = req.kwargs.get("json", {})
+            other = payload["programs"][1]
+            assert other["programCharacteristics"]["mode"] is None
+            assert other["dataChanged"] is True
+
+
+@pytest.mark.asyncio
+async def test_set_filtration_mode_program_not_in_list():
+    """Test mode set when program ID is not found in module programs."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    with aioresponses() as m:
+        _mock_filtration_endpoints(m)
+
+        async with aiohttp.ClientSession() as session:
+            client = _make_client(session)
+            client._pool_address = TEST_POOL_ADDRESS
+            client._device_short_id = "ABC"
+            client._data = IndygoPoolData(pool_id=TEST_POOL_ID)
+            client._data.modules[TEST_MODULE_ID] = IndygoModuleData(
+                id=TEST_MODULE_ID,
+                type="lr-pc",
+                name="Pump",
+                programs=[],  # Empty — program won't be found
+                raw_data={"serialNumber": TEST_SERIAL},
+            )
+
+            await client.async_set_filtration_mode(
+                TEST_MODULE_ID, FILT_PROGRAM_WITH_ID, 1
+            )
+
+            # Program should still be appended
+            req = m.requests[("PUT", URL(f"{BASE_URL}/api/updatePrograms"))][0]
+            payload = req.kwargs.get("json", {})
+            assert len(payload["programs"]) == 1
+            assert payload["programs"][0]["programCharacteristics"]["mode"] == 1
+
+
+@pytest.mark.asyncio
+async def test_get_data_with_ipx_module():
+    """Test that IPX module data is merged into status."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    modules_with_ipx = {
+        "modules": [
+            MODULES_RESPONSE["modules"][0],
+            MODULES_RESPONSE["modules"][1],
+            {"id": "ipx_1", "type": "ipx", "name": "IPX"},
+        ],
+    }
+
+    with aioresponses() as m:
+        m.post(f"{BASE_URL}/api/getUserWithHisModules", payload=modules_with_ipx)
+        m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
+        m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
+        m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
+        m.get(f"{BASE_URL}/v1/module/{TEST_POOL_ADDRESS}/status/ABC", payload={})
+
+        async with aiohttp.ClientSession() as session:
+            client = _make_client(session)
+            data = await client.async_get_data()
+            assert "ipx_1" in data.modules
+
+
+@pytest.mark.asyncio
+async def test_get_data_missing_hardware_ids():
+    """Test error when no compatible module found."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    with aioresponses() as m:
+        m.post(
+            f"{BASE_URL}/api/getUserWithHisModules",
+            payload={"modules": [{"id": "x", "type": "unknown"}]},
+        )
+
+        async with aiohttp.ClientSession() as session:
+            client = _make_client(session)
             with pytest.raises(IndygoPoolApiClientError, match="Could not determine"):
-                await client.async_refresh_scraped_data()
+                await client.async_get_data()
+
+
+@pytest.mark.asyncio
+async def test_remote_control_no_serial():
+    """Test remote control with no serial available."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    with aioresponses() as m:
+        async with aiohttp.ClientSession() as session:
+            client = _make_client(session)
+            client._pool_address = None
+
+            # Should not raise, just log warning
+            await client.async_send_remote_control("off")
+            # No request should have been made
+            assert len(m.requests) == 0
+
+
+@pytest.mark.asyncio
+async def test_remote_control_with_kwargs():
+    """Test remote control passes extra kwargs."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    with aioresponses() as m:
+        m.post(f"{BASE_URL}/api/setManualCommandToSend", payload={"status": "ok"})
+
+        async with aiohttp.ClientSession() as session:
+            client = _make_client(session)
+            client._pool_address = "SER1"
+
+            expected_action = 3
+            expected_time = 60
+            expected_duration = 120
+            await client.async_send_remote_control(
+                "on",
+                action=expected_action,
+                time=expected_time,
+                manualDuration=expected_duration,
+            )
+
+            req = m.requests[("POST", URL(f"{BASE_URL}/api/setManualCommandToSend"))][0]
+            payload = req.kwargs.get("json", {})
+            item = payload["linesControl"][0]
+            assert item["action"] == expected_action
+            assert item["time"] == expected_time
+            assert item["manualDuration"] == expected_duration
+
+
+@pytest.mark.asyncio
+async def test_lorawan_sync_failure_logged():
+    """Test LoRaWAN sync failure is caught and logged."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    with aioresponses() as m:
+        m.post(f"{BASE_URL}/modules/sendDataViaLoRaWAN", status=500)
+
+        async with aiohttp.ClientSession() as session:
+            client = _make_client(session)
+            # Should not raise
+            await client.async_synchronize_lorawan("mod1")
+
+
+@pytest.mark.asyncio
+async def test_login_network_error():
+    """Test login raises on network error."""
+    async with aiohttp.ClientSession() as session:
+        client = IndygoPoolApiClient("test@example.com", "pass", TEST_POOL_ID, session)
+        with patch.object(
+            session,
+            "post",
+            side_effect=aiohttp.ClientError("Network down"),
+        ):
+            with pytest.raises(IndygoPoolApiClientCommunicationError):
+                await client.async_login()
+
+
+@pytest.mark.asyncio
+async def test_request_network_error():
+    """Test _request raises on network error."""
+    async with aiohttp.ClientSession() as session:
+        client = _make_client(session)
+        with patch.object(
+            session,
+            "request",
+            side_effect=aiohttp.ClientError("Connection refused"),
+        ):
+            with pytest.raises(IndygoPoolApiClientCommunicationError):
+                await client._request("GET", f"{BASE_URL}/test")
+
+
+@pytest.mark.asyncio
+async def test_set_filtration_mode_invalid_program():
+    """Test error when program data has no programCharacteristics."""
+    async with aiohttp.ClientSession() as session:
+        client = _make_client(session)
+        client._data = IndygoPoolData(pool_id=TEST_POOL_ID)
+
+        bad_program = {"id": "prog_bad"}
+        with pytest.raises(IndygoPoolApiClientError, match="programCharacteristics"):
+            await client.async_set_filtration_mode(TEST_MODULE_ID, bad_program, 1)

@@ -210,3 +210,7 @@ __marimo__/
 config/*
 !config/configuration.yaml
 *.zip
+
+# Reverse engineering
+reverse-engineering/
+.claude/
