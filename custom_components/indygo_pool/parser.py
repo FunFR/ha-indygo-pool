@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from datetime import UTC, datetime
 
 from .const import PROGRAM_TYPE_FILTRATION
 from .models import IndygoModuleData, IndygoPoolData, IndygoSensorData
@@ -296,6 +297,92 @@ class IndygoParser:
 
         return pool_data
 
+    @staticmethod
+    def _minutes_to_time(minutes: int) -> str:
+        """Convert minutes since midnight to HH:MM string."""
+        hours = minutes // 60
+        mins = minutes % 60
+        return f"{hours:02d}:{mins:02d}"
+
+    @staticmethod
+    def _parse_remaining_time(time_str: str) -> int | None:
+        """Parse remaining time string 'HH:MM' into total minutes."""
+        try:
+            parts = time_str.split(":")
+            return int(parts[0]) * 60 + int(parts[1])
+        except (ValueError, IndexError):
+            return None
+
+    @staticmethod
+    def _parse_dialog_timestamp(raw: str | None) -> datetime | None:
+        """Parse dialogTimeStamp (ISO 8601) into a timezone-aware datetime."""
+        if not raw:
+            return None
+        try:
+            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
+        except (ValueError, TypeError):
+            return None
+
+    def _build_schedule_attributes(
+        self,
+        filt_module: IndygoModuleData,
+        temp_ref: int | None,
+        dialog_ts: datetime | None,
+    ) -> dict:
+        """Build filtration schedule attributes from temperatureSchedules and tempRef.
+
+        Returns a dict of extra attributes to merge into the filtration pool_status.
+        """
+        if temp_ref is None or not filt_module.filtration_program:
+            return {}
+
+        schedules = filt_module.filtration_program.get("temperatureSchedules", [])
+        if not schedules:
+            return {}
+
+        thresholds = schedules[0].get("thresholds", [])
+        if not isinstance(thresholds, list) or temp_ref >= len(thresholds):
+            return {}
+
+        windows = thresholds[temp_ref]
+        if not windows:
+            return {}
+
+        first = windows[0]
+        start_min = first.get("start")
+        end_min = first.get("end")
+        if start_min is None or end_min is None:
+            return {}
+
+        # Build datetime values using dialogTimeStamp date
+        schedule_start = self._minutes_to_time(start_min)
+        schedule_end = self._minutes_to_time(end_min)
+        if dialog_ts:
+            base_date = dialog_ts.replace(hour=0, minute=0, second=0, microsecond=0)
+            schedule_start = base_date.replace(
+                hour=start_min // 60, minute=start_min % 60
+            ).isoformat()
+            schedule_end = base_date.replace(
+                hour=min(end_min // 60, 23), minute=end_min % 60
+            ).isoformat()
+
+        return {
+            "schedule_start": schedule_start,
+            "schedule_end": schedule_end,
+            "schedule_duration_minutes": sum(
+                w.get("end", 0) - w.get("start", 0) for w in windows
+            ),
+            "schedule_windows": [
+                {
+                    "start": self._minutes_to_time(w["start"]),
+                    "end": self._minutes_to_time(w["end"]),
+                }
+                for w in windows
+                if "start" in w and "end" in w
+            ],
+        }
+
     def _parse_pool_status_list(
         self, json_data: dict, pool_data: IndygoPoolData
     ) -> None:
@@ -318,15 +405,42 @@ class IndygoParser:
 
             # Index 0 is Filtration
             if idx == 0:
+                temp_ref = item.get("tempRef")
+                remaining_time = item.get("time")
+
+                extra_attributes = {
+                    "info": item.get("info"),
+                    "time": remaining_time,
+                    "tempRef": temp_ref,
+                }
+
+                # Merge schedule attributes into filtration status
+                if filt_module:
+                    dialog_ts = self._parse_dialog_timestamp(
+                        json_data.get("dialogTimeStamp")
+                    )
+                    extra_attributes.update(
+                        self._build_schedule_attributes(
+                            filt_module, temp_ref, dialog_ts
+                        )
+                    )
+
                 target_status["0"] = IndygoSensorData(
                     key="filtration_status",
                     value=val,
-                    extra_attributes={
-                        "info": item.get("info"),
-                        "time": item.get("time"),
-                        "tempRef": item.get("tempRef"),
-                    },
+                    extra_attributes=extra_attributes,
                 )
+
+                # Remaining filtration time in minutes
+                if remaining_time and filt_module:
+                    remaining_minutes = self._parse_remaining_time(remaining_time)
+                    if remaining_minutes is not None:
+                        filt_module.sensors["filtration_remaining_time"] = (
+                            IndygoSensorData(
+                                key="filtration_remaining_time",
+                                value=remaining_minutes,
+                            )
+                        )
 
     def _parse_root_sensors(self, json_data: dict, pool_data: IndygoPoolData) -> None:
         """Parse root level sensors."""

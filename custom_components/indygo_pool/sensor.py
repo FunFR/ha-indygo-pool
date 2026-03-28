@@ -74,6 +74,12 @@ SENSOR_TYPES: tuple[IndygoSensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=1,
     ),
+    IndygoSensorEntityDescription(
+        key="filtration_remaining_time",
+        translation_key="filtration_remaining_time",
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
 )
 
 

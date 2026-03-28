@@ -44,6 +44,9 @@
             },
             "ph": {
                 "name": "pH"
+            },
+            "filtration_remaining_time": {
+                "name": "Filtration remaining time"
             }
         },
         "binary_sensor": {
