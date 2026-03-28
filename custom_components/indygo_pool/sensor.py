@@ -20,6 +20,7 @@ from homeassistant.util import slugify
 from .const import DOMAIN
 from .coordinator import IndygoPoolDataUpdateCoordinator
 from .entity import IndygoPoolEntity
+from .models import IndygoSensorData
 
 
 @dataclass
@@ -148,51 +149,31 @@ class IndygoPoolSensor(IndygoPoolEntity, SensorEntity):
         """Initialize."""
         super().__init__(coordinator, module_id)
         self.entity_description = description
-        self._sensor_key = description.key
-        self._module_id = module_id
-
-        # Unique ID: PoolID_ModuleID_Key
-        self._attr_unique_id = (
-            f"{self._pool_unique_id}_{module_id}_{self._sensor_key}"
-            if module_id
-            else f"{self._pool_unique_id}_{self._sensor_key}"
-        )
-
-        # Force English entity_id
+        self._attr_unique_id = self._build_unique_id(description.key)
         self.entity_id = (
             f"sensor.{self.device_name_slug}_{slugify(description.translation_key)}"
         )
 
-    @property
-    def native_value(self) -> float | str | None:
-        """Return the native value of the sensor."""
+    def _get_sensor_data(self) -> IndygoSensorData | None:
+        """Resolve the sensor data from module or root sensors."""
         data = self.coordinator.data
         if not data:
             return None
-
+        key = self.entity_description.key
         if self._module_id and self._module_id in data.modules:
-            module = data.modules[self._module_id]
-            if self._sensor_key in module.sensors:
-                return module.sensors[self._sensor_key].value
+            sensor = data.modules[self._module_id].sensors.get(key)
+            if sensor:
+                return sensor
+        return data.sensors.get(key)
 
-        if self._sensor_key in data.sensors:
-            return data.sensors[self._sensor_key].value
-
-        return None
+    @property
+    def native_value(self) -> float | str | None:
+        """Return the native value of the sensor."""
+        sensor = self._get_sensor_data()
+        return sensor.value if sensor else None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
         """Return the state attributes."""
-        data = self.coordinator.data
-        if not data:
-            return None
-
-        if self._module_id:
-            if self._module_id in data.modules:
-                module = data.modules[self._module_id]
-                if self._sensor_key in module.sensors:
-                    return module.sensors[self._sensor_key].extra_attributes
-        elif self._sensor_key in data.sensors:
-            return data.sensors[self._sensor_key].extra_attributes
-
-        return None
+        sensor = self._get_sensor_data()
+        return sensor.extra_attributes if sensor else None

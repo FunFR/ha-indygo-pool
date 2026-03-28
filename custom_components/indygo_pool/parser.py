@@ -6,6 +6,7 @@ import json
 import logging
 import re
 from datetime import UTC, datetime
+from typing import Any
 
 from .const import PROGRAM_TYPE_FILTRATION
 from .models import IndygoModuleData, IndygoPoolData, IndygoSensorData
@@ -14,6 +15,29 @@ _LOGGER = logging.getLogger(__name__)
 
 
 IPX_PH_SENSOR_TYPE = 6
+
+
+def _get_nested(obj: dict | list | None, *keys: str) -> Any:
+    """Safely traverse nested dicts/lists by key or index."""
+    for k in keys:
+        if not isinstance(obj, (dict, list)):
+            return None
+        if isinstance(obj, list):
+            try:
+                obj = obj[int(k)]
+            except (IndexError, ValueError):
+                return None
+        else:
+            obj = obj.get(k)
+    return obj
+
+
+def _js_var_regex(var_name: str, delimiter: str = r"[{\[]") -> re.Pattern:
+    """Build a compiled regex to match a JS variable assignment."""
+    return re.compile(
+        rf"(?:var|let|const|window\.)\s*{var_name}\s*=\s*({delimiter})",
+        re.IGNORECASE,
+    )
 
 
 class IndygoParser:
@@ -131,11 +155,7 @@ class IndygoParser:
         Returns:
             Tuple of (pool_address, device_short_id, relay_id, pool_metadata_dict)
         """
-        # Extract currentPool JSON
-        start_regex = re.compile(
-            r"(?:var|let|const|window\.)?\s*currentPool\s*=\s*([{\[])", re.IGNORECASE
-        )
-        match = start_regex.search(html)
+        match = _js_var_regex("currentPool").search(html)
 
         json_str = None
         pool_metadata = {}
@@ -151,11 +171,7 @@ class IndygoParser:
                 _LOGGER.error("Failed to decode currentPool JSON: %s", exc)
                 return None, None, None, {}
         else:
-            # Fallback to modulesInPool
-            modules_regex = re.compile(
-                r"(?:var|let|const|window\.)?\s*modulesInPool\s*=\s*(\[)", re.IGNORECASE
-            )
-            match = modules_regex.search(html)
+            match = _js_var_regex("modulesInPool", r"\[").search(html)
             if match:
                 start_index = match.start(1)
                 json_str = self.extract_json_object(html, start_index)
@@ -189,12 +205,7 @@ class IndygoParser:
         """Parse HTML to find ipxModule data (embedded JS)."""
         ipx_metadata = {}
 
-        # 1. Search for poolTechModulesIpx (contains outputs for electrolyzer settings)
-        pooltech_regex = re.compile(
-            r"(?:var|let|const|window\.)?\s*poolTechModulesIpx\s*=\s*(\[)",
-            re.IGNORECASE,
-        )
-        match = pooltech_regex.search(html)
+        match = _js_var_regex("poolTechModulesIpx", r"\[").search(html)
         if match and (json_str := self.extract_json_object(html, match.start(1))):
             try:
                 modules_list = json.loads(json_str)
@@ -205,11 +216,7 @@ class IndygoParser:
             except json.JSONDecodeError as exc:
                 _LOGGER.error("Failed to decode poolTechModulesIpx JSON: %s", exc)
 
-        # 2. Search for ipxModule (legacy single object)
-        ipx_start_regex = re.compile(
-            r"(?:var|let|const|window\.)?\s*ipxModule\s*=\s*(\{)", re.IGNORECASE
-        )
-        match = ipx_start_regex.search(html)
+        match = _js_var_regex("ipxModule", r"\{").search(html)
         if match and (json_str := self.extract_json_object(html, match.start(1))):
             try:
                 ipx_metadata = json.loads(json_str)
@@ -217,11 +224,7 @@ class IndygoParser:
             except json.JSONDecodeError as exc:
                 _LOGGER.error("Failed to decode ipxModule JSON: %s", exc)
 
-        # 3. Fallback to modulesInPool (new general module list but misses outputs)
-        modules_regex = re.compile(
-            r"(?:var|let|const|window\.)?\s*modulesInPool\s*=\s*(\[)", re.IGNORECASE
-        )
-        match = modules_regex.search(html)
+        match = _js_var_regex("modulesInPool", r"\[").search(html)
         if match and (json_str := self.extract_json_object(html, match.start(1))):
             try:
                 modules_list = json.loads(json_str)
@@ -238,11 +241,7 @@ class IndygoParser:
         """Parse programs from embedded HTML JSON."""
         programs_map: dict[str, list[dict]] = {}
 
-        # Regex for 'const poolCommand'
-        regex = re.compile(
-            r"(?:var|let|const|window\.)?\s*poolCommand\s*=\s*(\{)", re.IGNORECASE
-        )
-        match = regex.search(html)
+        match = _js_var_regex("poolCommand", r"\{").search(html)
         if match and (json_str := self.extract_json_object(html, match.start(1))):
             try:
                 data = json.loads(json_str)
@@ -255,11 +254,7 @@ class IndygoParser:
                 _LOGGER.error("Failed to decode poolCommand JSON: %s", exc)
             return programs_map
 
-        # Fallback to modulesInPool
-        modules_regex = re.compile(
-            r"(?:var|let|const|window\.)?\s*modulesInPool\s*=\s*(\[)", re.IGNORECASE
-        )
-        match = modules_regex.search(html)
+        match = _js_var_regex("modulesInPool", r"\[").search(html)
         if match and (json_str := self.extract_json_object(html, match.start(1))):
             try:
                 for m in json.loads(json_str):
@@ -270,6 +265,16 @@ class IndygoParser:
             except json.JSONDecodeError as exc:
                 _LOGGER.error("Failed to decode modulesInPool JSON: %s", exc)
         return programs_map
+
+    @staticmethod
+    def _find_filtration_module(
+        pool_data: IndygoPoolData,
+    ) -> IndygoModuleData | None:
+        """Find the module responsible for filtration."""
+        return next(
+            (m for m in pool_data.modules.values() if m.filtration_program),
+            next((m for m in pool_data.modules.values() if m.type == "lr-pc"), None),
+        )
 
     def parse_data(
         self,
@@ -290,10 +295,11 @@ class IndygoParser:
         # 2. Scraped IPX Data
         self._parse_scraped_ipx(json_data, pool_data)
 
-        # 3. Main Pool Data
-        self._parse_root_sensors(json_data, pool_data)
-        self._parse_sensor_state(json_data, pool_data)
-        self._parse_pool_status_list(json_data, pool_data)
+        # 3. Main Pool Data — resolve filtration module once
+        filt_module = self._find_filtration_module(pool_data)
+        self._parse_root_sensors(json_data, pool_data, filt_module)
+        self._parse_sensor_state(json_data, pool_data, filt_module)
+        self._parse_pool_status_list(json_data, pool_data, filt_module)
 
         return pool_data
 
@@ -384,17 +390,14 @@ class IndygoParser:
         }
 
     def _parse_pool_status_list(
-        self, json_data: dict, pool_data: IndygoPoolData
+        self,
+        json_data: dict,
+        pool_data: IndygoPoolData,
+        filt_module: IndygoModuleData | None = None,
     ) -> None:
         """Parse 'pool' list which contains status for Filtration, etc."""
         if "pool" not in json_data or not isinstance(json_data["pool"], list):
             return
-
-        # Find Filtration Module to attach sensors
-        filt_module = next(
-            (m for m in pool_data.modules.values() if m.filtration_program),
-            next((m for m in pool_data.modules.values() if m.type == "lr-pc"), None),
-        )
         target_status = (
             filt_module.pool_status if filt_module else pool_data.pool_status
         )
@@ -442,7 +445,12 @@ class IndygoParser:
                             )
                         )
 
-    def _parse_root_sensors(self, json_data: dict, pool_data: IndygoPoolData) -> None:
+    def _parse_root_sensors(
+        self,
+        json_data: dict,
+        pool_data: IndygoPoolData,
+        filt_module: IndygoModuleData | None = None,
+    ) -> None:
         """Parse root level sensors."""
         root_sensors_map = {
             "temperature": {
@@ -450,11 +458,6 @@ class IndygoParser:
             },
         }
 
-        # Find Filtration Module (Temperature is from LR-PC)
-        filt_module = next(
-            (m for m in pool_data.modules.values() if m.filtration_program),
-            next((m for m in pool_data.modules.values() if m.type == "lr-pc"), None),
-        )
         target_sensors = filt_module.sensors if filt_module else pool_data.sensors
 
         for key, config in root_sensors_map.items():
@@ -472,18 +475,18 @@ class IndygoParser:
                     extra_attributes=extra_attributes,
                 )
 
-    def _parse_sensor_state(self, json_data: dict, pool_data: IndygoPoolData) -> None:
+    def _parse_sensor_state(
+        self,
+        json_data: dict,
+        pool_data: IndygoPoolData,
+        filt_module: IndygoModuleData | None = None,
+    ) -> None:
         """Parse sensorState (legacy/generic list)."""
         if "sensorState" not in json_data or not isinstance(
             json_data["sensorState"], list
         ):
             return
 
-        # Find Filtration Module (Temperature is from LR-PC)
-        filt_module = next(
-            (m for m in pool_data.modules.values() if m.filtration_program),
-            next((m for m in pool_data.modules.values() if m.type == "lr-pc"), None),
-        )
         target_sensors = filt_module.sensors if filt_module else pool_data.sensors
 
         for sensor_item in json_data["sensorState"]:
@@ -565,42 +568,24 @@ class IndygoParser:
         # Fallback to root sensors if no module found
         target_sensors = ipx_module.sensors if ipx_module else pool_data.sensors
 
-        # Helper to safely get nested
-        def get_nested(obj, *keys):
-            for k in keys:
-                if not isinstance(obj, (dict, list)):
-                    return None
-                if isinstance(obj, list):
-                    try:
-                        obj = obj[int(k)]
-                    except (IndexError, ValueError):
-                        return None
-                else:
-                    obj = obj.get(k)
-            return obj
-
-        # Salt
-        salt = get_nested(outputs, 1, "ipxData", "saltValue")
+        salt = _get_nested(outputs, 1, "ipxData", "saltValue")
         if salt is not None:
             target_sensors["ipx_salt"] = IndygoSensorData(key="ipx_salt", value=salt)
 
-        # pH Setpoint
-        ph_set = get_nested(outputs, 0, "ipxData", "pHSetpoint")
+        ph_set = _get_nested(outputs, 0, "ipxData", "pHSetpoint")
         if ph_set is not None:
             target_sensors["ph_setpoint"] = IndygoSensorData(
                 key="ph_setpoint", value=ph_set
             )
 
-        # Production Setpoint
-        prod_set = get_nested(outputs, 1, "ipxData", "percentageSetpoint")
+        prod_set = _get_nested(outputs, 1, "ipxData", "percentageSetpoint")
         if prod_set is not None:
             target_sensors["production_setpoint"] = IndygoSensorData(
                 key="production_setpoint",
                 value=prod_set,
             )
 
-        # Electrolyzer Mode
-        elec_mode = get_nested(outputs, 1, "ipxData", "electrolyzerMode")
+        elec_mode = _get_nested(outputs, 1, "ipxData", "electrolyzerMode")
         if elec_mode is not None:
             target_sensors["electrolyzer_mode"] = IndygoSensorData(
                 key="electrolyzer_mode",

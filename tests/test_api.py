@@ -19,6 +19,7 @@ from custom_components.indygo_pool.api import (
     IndygoPoolApiClient,
     IndygoPoolApiClientAuthenticationError,
     IndygoPoolApiClientCommunicationError,
+    IndygoPoolApiClientError,
 )
 from custom_components.indygo_pool.models import IndygoPoolData
 
@@ -125,6 +126,8 @@ async def test_set_filtration_mode():
             client._relay_id = TEST_RELAY_ID
             client._pool_address = TEST_POOL_ADDRESS
             client._token = "fake_token"
+            # Populate scraped programs so the loop finds the program
+            client._scraped_programs = {TEST_MODULE_ID: [filt_program]}
 
             await client.async_set_filtration_mode(
                 TEST_MODULE_ID, filt_program, expected_mode
@@ -442,3 +445,77 @@ async def test_api_synchronize_lorawan():
             payload = json.loads(req.kwargs["data"])
             assert payload["moduleId"] == "mod1"
             assert payload["sendProgram"] is True
+
+
+DEVICES_HTML = """
+<script>
+var currentPool = {
+    "id": 12345,
+    "modules": [
+        {"type": "lr-mb-10", "serialNumber": "GW_SERIAL", "name": "Gateway"},
+        {"type": "lr-pc", "serialNumber": "LRPC_SERIAL", "name": "Pump-ABC",
+         "relay": "RELAY_1"}
+    ]
+};
+var poolTechModulesIpx = [{"type": "ipx_v1", "id": 1}];
+var poolCommand = {
+    "programs": [
+        {"module": "mod_1", "programCharacteristics": {"programType": 4, "mode": 2}}
+    ]
+};
+</script>
+"""
+
+
+@pytest.mark.asyncio
+async def test_refresh_scraped_data_caches_static_ids():
+    """Test that static IDs are parsed on first call and cached on subsequent calls."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    devices_url = f"https://myindygo.com/pools/{TEST_POOL_ID}/devices"
+
+    with aioresponses() as m:
+        m.get(devices_url, body=DEVICES_HTML)
+        m.get(devices_url, body=DEVICES_HTML)
+
+        async with aiohttp.ClientSession() as session:
+            client = IndygoPoolApiClient(
+                "test@example.com", "pass", TEST_POOL_ID, session
+            )
+
+            # First call: IDs should be parsed
+            await client.async_refresh_scraped_data()
+            assert client._pool_address == "GW_SERIAL"
+            assert client._device_short_id == "ABC"
+            assert client._relay_id == "RELAY_1"
+
+            # Second call: IDs should be cached, parse_pool_ids not called again
+            with patch.object(client._parser, "parse_pool_ids") as mock_parse:
+                await client.async_refresh_scraped_data()
+                mock_parse.assert_not_called()
+
+            # Dynamic data should still be refreshed
+            assert client._ipx_module_metadata is not None
+            assert client._scraped_programs is not None
+
+
+@pytest.mark.asyncio
+async def test_refresh_scraped_data_raises_on_missing_ids():
+    """Test that an error is raised when static IDs cannot be parsed."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    html_no_modules = "<html><body>No data here</body></html>"
+    devices_url = f"https://myindygo.com/pools/{TEST_POOL_ID}/devices"
+
+    with aioresponses() as m:
+        m.get(devices_url, body=html_no_modules)
+
+        async with aiohttp.ClientSession() as session:
+            client = IndygoPoolApiClient(
+                "test@example.com", "pass", TEST_POOL_ID, session
+            )
+
+            with pytest.raises(IndygoPoolApiClientError, match="Could not determine"):
+                await client.async_refresh_scraped_data()
