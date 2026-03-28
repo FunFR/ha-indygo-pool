@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -23,10 +22,7 @@ PLATFORMS: list[Platform] = [
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Indygo Pool from a config entry."""
-    # Create a dedicated session with cookie jar for authentication
-    # unsafe=True allows cookies from all domains (required for cross-domain auth)
-    cookie_jar = aiohttp.CookieJar(unsafe=True)
-    session = async_create_clientsession(hass, cookie_jar=cookie_jar)
+    session = async_create_clientsession(hass)
 
     client = IndygoPoolApiClient(
         email=entry.data[CONF_EMAIL],

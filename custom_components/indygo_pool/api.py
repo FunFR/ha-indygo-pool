@@ -1,9 +1,17 @@
-"""Indygo Pool API Client."""
+"""Indygo Pool API Client.
+
+Uses the official OAuth2 REST API (same as the Android app) instead of
+web scraping.  Authentication is done via ``/oauth2/token`` with the
+*resource-owner password* grant, and every subsequent call carries a
+Bearer token.
+"""
 
 from __future__ import annotations
 
+import asyncio
+import base64
 import copy
-import json
+import time
 from http import HTTPStatus
 from typing import Any
 
@@ -12,6 +20,18 @@ import aiohttp
 from .const import LOGGER, PROGRAM_TYPE_FILTRATION
 from .models import IndygoPoolData
 from .parser import IndygoParser
+
+BASE_URL = "https://myindygo.com"
+
+# OAuth2 client credentials extracted from the Android APK (production).
+_OAUTH2_CLIENT_ID = "5d1c5bb0b4acd1c748988085"
+_OAUTH2_CLIENT_SECRET = "LUowRAajRhZb6NZYqVCFkaLC"
+_OAUTH2_BASIC = base64.b64encode(
+    f"{_OAUTH2_CLIENT_ID}:{_OAUTH2_CLIENT_SECRET}".encode()
+).decode()
+
+# Safety margin before considering the token expired (seconds).
+_TOKEN_EXPIRY_MARGIN = 300
 
 
 class IndygoPoolApiClientError(Exception):
@@ -29,15 +49,6 @@ class IndygoPoolApiClientCommunicationError(IndygoPoolApiClientError):
 class IndygoPoolApiClient:
     """Indygo Pool API Client."""
 
-    DEFAULT_HEADERS = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/120.0.0.0 Safari/537.36"
-        )
-    }
-    JSON_HEADERS = {"Content-Type": "application/json"}
-
     def __init__(
         self,
         email: str,
@@ -52,26 +63,102 @@ class IndygoPoolApiClient:
         self._session = session
         self._parser = IndygoParser()
 
+        # OAuth2 state
+        self._token: str | None = None
+        self._token_expiry: float = 0
+
+        # Cached hardware identifiers (populated on first data fetch).
         self._pool_address: str | None = None
         self._device_short_id: str | None = None
         self._relay_id: str | None = None
-        self._pool_metadata: dict | None = None
-        self._ipx_module_metadata: dict | None = None
-        self._scraped_programs: dict[str, list[dict]] | None = None
+
+        # Cached rich data
         self._data: IndygoPoolData | None = None
+
+    # ------------------------------------------------------------------
+    # Authentication
+    # ------------------------------------------------------------------
+
+    async def async_login(self) -> None:
+        """Obtain a Bearer token via OAuth2 resource-owner password grant."""
+        try:
+            async with self._session.post(
+                f"{BASE_URL}/oauth2/token",
+                headers={"Authorization": f"Basic {_OAUTH2_BASIC}"},
+                json={
+                    "grant_type": "password",
+                    "username": self._email,
+                    "password": self._password,
+                    "scope": "*",
+                },
+            ) as resp:
+                if resp.status in (
+                    HTTPStatus.UNAUTHORIZED,
+                    HTTPStatus.FORBIDDEN,
+                ):
+                    raise IndygoPoolApiClientAuthenticationError(
+                        f"Login failed: {resp.status}"
+                    )
+                if resp.status != HTTPStatus.OK:
+                    text = await resp.text()
+                    raise IndygoPoolApiClientCommunicationError(
+                        f"Token request failed: {resp.status} - {text}"
+                    )
+                data = await resp.json()
+
+            if "access_token" not in data:
+                raise IndygoPoolApiClientAuthenticationError(
+                    f"No access_token in response: {data}"
+                )
+
+            self._token = f"{data['token_type']} {data['access_token']}"
+            self._token_expiry = time.monotonic() + data.get("expires_in", 3600)
+            LOGGER.debug(
+                "OAuth2 login successful, token expires in %ss",
+                data.get("expires_in"),
+            )
+
+        except aiohttp.ClientError as exc:
+            raise IndygoPoolApiClientCommunicationError(
+                f"Error during login: {exc}"
+            ) from exc
+
+    def _token_is_valid(self) -> bool:
+        """Return True if the current token is still usable."""
+        return (
+            self._token is not None
+            and time.monotonic() < self._token_expiry - _TOKEN_EXPIRY_MARGIN
+        )
+
+    async def _ensure_token(self) -> None:
+        """Ensure we have a valid token, refreshing if needed."""
+        if not self._token_is_valid():
+            await self.async_login()
+
+    # ------------------------------------------------------------------
+    # Generic HTTP helper
+    # ------------------------------------------------------------------
 
     async def _request(
         self,
         method: str,
         url: str,
         headers: dict | None = None,
-        data: dict | None = None,
+        data: str | None = None,
+        json_body: dict | None = None,
         return_json: bool = False,
-        allow_redirects: bool = True,
-        retry_auth: bool = False,
-    ) -> aiohttp.ClientResponse | dict | str:
-        """Perform an HTTP request."""
-        request_headers = self.DEFAULT_HEADERS.copy()
+        retry_auth: bool = True,
+    ) -> dict | str:
+        """Perform an authenticated HTTP request.
+
+        Automatically adds the Bearer token and retries once on 401/403.
+        """
+        await self._ensure_token()
+
+        request_headers: dict[str, str] = {
+            "Authorization": self._token,
+            "Accept": "version=2.7",
+        }
         if headers:
             request_headers.update(headers)
 
@@ -82,48 +169,35 @@ class IndygoPoolApiClient:
                 url,
                 headers=request_headers,
                 data=data,
-                allow_redirects=allow_redirects,
+                json=json_body,
             ) as response:
-                if (
-                    response.status in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN)
-                    or (
-                        # Sometimes scraping redirects to login on session expiry
-                        not allow_redirects
-                        and response.status == HTTPStatus.FOUND
-                        and "login" in response.headers.get("Location", "")
-                    )
-                    or (
-                        # Specific check for scraping where redirect
-                        # might be followed transparently
-                        "login" in str(response.url)
-                    )
-                ) and retry_auth:
-                    LOGGER.debug(
-                        "Session expired or redirected to login, re-authenticating..."
-                    )
-                    await self.async_login()
-                    # Retry carefully to avoid infinite recursion
-                    return await self._request(
-                        method,
-                        url,
-                        headers=headers,
-                        data=data,
-                        return_json=return_json,
-                        allow_redirects=allow_redirects,
-                        retry_auth=False,
+                if response.status in (
+                    HTTPStatus.UNAUTHORIZED,
+                    HTTPStatus.FORBIDDEN,
+                ):
+                    if retry_auth:
+                        LOGGER.debug("Token expired, re-authenticating...")
+                        await self.async_login()
+                        return await self._request(
+                            method,
+                            url,
+                            headers=headers,
+                            data=data,
+                            json_body=json_body,
+                            return_json=return_json,
+                            retry_auth=False,
+                        )
+                    raise IndygoPoolApiClientAuthenticationError(
+                        f"Authentication failed: {response.status}"
                     )
 
-                if response.status != HTTPStatus.OK and not (
-                    # Allow 302 for login flow if caller handles it
-                    not allow_redirects and response.status == HTTPStatus.FOUND
-                ):
-                    # We might want to read the body for error details
+                if response.status != HTTPStatus.OK:
                     try:
                         text = await response.text()
                     except Exception:
                         text = "<could not read response>"
                     LOGGER.error(
-                        "API Request %s %s failed: %s - %s",
+                        "API %s %s failed: %s - %s",
                         method,
                         url,
                         response.status,
@@ -137,168 +211,143 @@ class IndygoPoolApiClient:
                     return await response.json()
                 return await response.text()
 
-        except aiohttp.ClientError as exception:
+        except aiohttp.ClientError as exc:
             raise IndygoPoolApiClientCommunicationError(
-                f"Error communicating with API: {exception}"
-            ) from exception
+                f"Error communicating with API: {exc}"
+            ) from exc
 
-    async def async_login(self) -> None:
-        """Login to the API."""
-        try:
-            data = {
-                "email": self._email,
-                "password": self._password,
-            }
+    # ------------------------------------------------------------------
+    # API data helpers
+    # ------------------------------------------------------------------
 
-            await self._request("GET", "https://myindygo.com/login", retry_auth=False)
-
-            async with self._session.post(
-                "https://myindygo.com/login",
-                data=data,
-                headers=self.DEFAULT_HEADERS,
-                allow_redirects=False,
-            ) as response:
-                if response.status not in (HTTPStatus.OK, HTTPStatus.FOUND):
-                    raise IndygoPoolApiClientAuthenticationError(
-                        f"Login failed: status code {response.status}, "
-                        f"text: {await response.text()}"
-                    )
-
-                if response.status == HTTPStatus.FOUND:
-                    location = response.headers.get("Location")
-                    LOGGER.debug("Login successful (redirected to %s)", location)
-                else:
-                    LOGGER.warning(
-                        "Login returned 200, expected 302. Content start: %s",
-                        (await response.text())[:200],
-                    )
-
-        except aiohttp.ClientError as exception:
-            raise IndygoPoolApiClientCommunicationError(
-                f"Error logging in: {exception}"
-            ) from exception
-
-    async def async_refresh_scraped_data(self) -> None:
-        """Fetch and parse the pool devices page to get fresh scraped data."""
-        url = f"https://myindygo.com/pools/{self._pool_id}/devices"
-        text = await self._request("GET", url, retry_auth=True)
-        if not isinstance(text, str):
-            text = str(text)
-
-        # Static IDs (pool_address, device_short_id, relay_id) are tied to
-        # hardware and don't change between polls — parse them only once.
-        ids_missing = (
-            not self._pool_address or not self._device_short_id or not self._relay_id
+    async def _api_call(self, method: str, path: str, body: dict | None = None) -> dict:
+        """Perform an API call and return JSON."""
+        return await self._request(
+            method,
+            f"{BASE_URL}{path}",
+            json_body=body or {},
+            return_json=True,
         )
-        if ids_missing:
-            pool_address, device_short_id, relay_id, pool_metadata = (
-                self._parser.parse_pool_ids(text, self._pool_id)
+
+    async def _api_post(self, path: str, body: dict | None = None) -> dict:
+        """POST to ``BASE_URL + path`` and return JSON."""
+        return await self._api_call("POST", path, body)
+
+    async def _api_put(self, path: str, body: dict) -> dict:
+        """PUT to ``BASE_URL + path`` and return JSON."""
+        return await self._api_call("PUT", path, body)
+
+    # ------------------------------------------------------------------
+    # Data fetching  (replaces HTML scraping)
+    # ------------------------------------------------------------------
+
+    async def _fetch_modules_metadata(self) -> list[dict]:
+        """Fetch modules list via /api/getUserWithHisModules."""
+        data = await self._api_post("/api/getUserWithHisModules")
+        return data.get("modules", [])
+
+    async def _fetch_module_programs(self, module_id: str) -> list[dict]:
+        """Fetch programs for a specific module."""
+        data = await self._api_post(
+            "/api/getModuleWithHisPrograms", {"module": module_id}
+        )
+        return data.get("programs", [])
+
+    async def _resolve_hardware_ids(self, modules: list[dict]) -> None:
+        """Resolve pool_address, device_short_id and relay_id from modules."""
+        if self._pool_address and self._device_short_id and self._relay_id:
+            return
+
+        pool_address, device_short_id, relay_id = self._parser.resolve_hardware_ids(
+            modules
+        )
+
+        if not pool_address or not device_short_id or not relay_id:
+            raise IndygoPoolApiClientError(
+                "Could not determine Pool Address, Device Short ID, or Relay ID "
+                f"from {len(modules)} modules."
             )
 
-            if not pool_address or not device_short_id or not relay_id:
-                LOGGER.error("HTML (truncated): %s", text[:1000])
-                raise IndygoPoolApiClientError(
-                    "Could not determine Pool Address, Device Short ID, or Relay ID."
-                )
-
-            self._pool_address = pool_address
-            self._device_short_id = device_short_id
-            self._relay_id = relay_id
-            self._pool_metadata = pool_metadata
-
-        # Dynamic data — always refresh
-        self._ipx_module_metadata = self._parser.parse_ipx_module(text)
-        self._scraped_programs = self._parser.parse_programs_from_html(text)
-
-        LOGGER.debug(
-            "Refreshed scraped data: gateway_serial=%s, device_short_id=%s, "
-            "relay_id=%s, programs_found=%s",
-            self._pool_address,
-            self._device_short_id,
-            self._relay_id,
-            bool(self._scraped_programs),
-        )
+        self._pool_address = pool_address
+        self._device_short_id = device_short_id
+        self._relay_id = relay_id
 
     async def async_get_data(self) -> IndygoPoolData:
         """Get data from the API."""
-        await self.async_refresh_scraped_data()
+        # 1. Fetch modules metadata (needed for hardware IDs and programs)
+        modules = await self._fetch_modules_metadata()
 
-        if not self._pool_address or not self._device_short_id:
-            raise IndygoPoolApiClientError(
-                "Missing pool address or device short ID. "
-                "Call async_refresh_data first."
-            )
+        # 2. Resolve hardware identifiers once
+        await self._resolve_hardware_ids(modules)
 
-        url = f"https://myindygo.com/v1/module/{self._pool_address}/status/{self._device_short_id}"
-        headers = {
-            "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Referer": f"https://myindygo.com/pools/{self._pool_id}/devices",
-            "Origin": "https://myindygo.com",
-            # User-Agent is in DEFAULT_HEADERS
-            "x-requested-with": "XMLHttpRequest",
-            "accept": "version=2.1",
-        }
+        # 3. Enrich modules with their programs (concurrent)
+        async def _attach_programs(mod: dict) -> None:
+            mod_id = mod.get("id")
+            if mod_id:
+                programs = await self._fetch_module_programs(str(mod_id))
+                if programs:
+                    mod["programs"] = programs
 
-        LOGGER.debug("Fetching data from %s", url)
+        await asyncio.gather(*[_attach_programs(m) for m in modules])
 
-        # get_request handles re-login if 401/403
-        data = await self._request(
-            "GET", url, headers=headers, return_json=True, retry_auth=True
+        # 4. Fetch live status data from the device endpoint
+        url = (
+            f"{BASE_URL}/v1/module/{self._pool_address}/status/{self._device_short_id}"
         )
-        if not isinstance(data, dict):
-            # Should not happen if return_json=True and successful
-            # But _request type hint allows str.
-            # If it was a string, likely an error page or something went wrong?
-            # For now assume it worked or _request raised.
-            data = {}
+        status_data = await self._request(
+            "GET",
+            url,
+            headers={"x-requested-with": "XMLHttpRequest"},
+            return_json=True,
+        )
 
-        LOGGER.debug("API Data received: %s", data)
+        # 5. Merge modules metadata into the status data
+        status_data["modules"] = modules
 
-        # Merge with metadata if available for completeness
-        if self._pool_metadata:
-            data.update(self._pool_metadata)
-        if self._ipx_module_metadata:
-            data["ipx_module"] = self._ipx_module_metadata
+        # 6. Fetch IPX module data if present
+        ipx_module = next(
+            (m for m in modules if str(m.get("type", "")).startswith("ipx")),
+            None,
+        )
+        if ipx_module:
+            status_data["ipx_module"] = ipx_module
 
-        # Parse data
+        # 7. Parse into structured data
         self._data = self._parser.parse_data(
-            data,
+            status_data,
             self._pool_id,
             self._pool_address,
             self._relay_id,
-            scraped_programs=self._scraped_programs,
         )
         return self._data
+
+    # ------------------------------------------------------------------
+    # Filtration mode control
+    # ------------------------------------------------------------------
 
     async def async_set_filtration_mode(
         self, module_id: str, full_program_data: dict, mode: int
     ) -> None:
         """Set the filtration mode (Auto/Off/On) safely.
 
-        We MUST send back the FULL program object, otherwise we risk corrupting
-        the device configuration (erasing timers, etc.).
+        Sends the FULL program list back (like the Android app) to avoid
+        corrupting the device configuration.
         """
         program_copy = copy.deepcopy(full_program_data)
 
-        # Mode: 0=OFF, 1=ON, 2=AUTO
-        if "programCharacteristics" in program_copy:
-            program_copy["programCharacteristics"]["mode"] = mode
-        else:
+        if "programCharacteristics" not in program_copy:
             raise IndygoPoolApiClientError(
                 "Invalid program data: missing programCharacteristics"
             )
-
+        program_copy["programCharacteristics"]["mode"] = mode
         program_copy["dataChanged"] = True
+
+        # Collect all programs for this module
         module_programs = []
-        module_name = ""
         if self._data and module_id in self._data.modules:
             module_programs = self._data.modules[module_id].programs
-            module_name = self._data.modules[module_id].name
-        elif self._scraped_programs and module_id in self._scraped_programs:
-            module_programs = self._scraped_programs[module_id]
 
-        # Replace the old program in the list with the newly updated one
-        # and set dataChanged=True on ALL programs
+        # Build the full programs list with updated filtration program
         updated_programs = []
         program_id = program_copy.get("id")
         program_found = False
@@ -309,8 +358,6 @@ class IndygoPoolApiClient:
             else:
                 prog_copy = copy.deepcopy(prog)
                 prog_copy["dataChanged"] = True
-
-                # Only filtration programs (programType=4) should have a mode value
                 prog_type = prog_copy.get("programCharacteristics", {}).get(
                     "programType"
                 )
@@ -320,20 +367,10 @@ class IndygoPoolApiClient:
                         and "mode" in prog_copy["programCharacteristics"]
                     ):
                         prog_copy["programCharacteristics"]["mode"] = None
-
                 updated_programs.append(prog_copy)
 
         if not program_found:
             updated_programs.append(program_copy)
-
-        # 5. Construct payload with ALL programs
-        payload = {
-            "module": module_id,
-            "programs": updated_programs,  # Send ALL programs, not just one!
-        }
-
-        url_program = "https://myindygo.com/program/update"
-        url_module = "https://myindygo.com/module/update"
 
         LOGGER.debug(
             "Setting filtration mode to %s for module %s. Sending %d programs.",
@@ -343,174 +380,27 @@ class IndygoPoolApiClient:
         )
 
         try:
-            headers = self.JSON_HEADERS
-
-            module_payload = {
-                "module": {
-                    "id": module_id,
-                    "name": module_name if module_name else "",
-                }
-            }
-
-            await self._request(
-                "PUT",
-                url_module,
-                headers=headers,
-                data=json.dumps(module_payload),
-                return_json=True,
-                retry_auth=True,
+            # 1. Update programs in cloud database
+            await self._api_put(
+                "/api/updatePrograms",
+                {"module": module_id, "programs": updated_programs},
             )
 
-            await self._request(
-                "PUT",
-                url_program,
-                headers=headers,
-                data=json.dumps(payload),
-                return_json=True,
-                retry_auth=True,
-            )
-
-            # 6. Trigger remote synchronization
-            await self.async_apply_module_changes(
-                module_id,
-                self._relay_id,
-                updated_programs,
-                program_copy,
-                module_name=module_name,
-            )
-
-        except IndygoPoolApiClientError as exception:
-            LOGGER.error("Failed to set filtration mode: %s", exception)
-            raise
-
-    def _get_module_serial(self, module_id: str) -> str | None:
-        """Get module serial number from various sources."""
-        # Try from cached data
-        if self._data and module_id in self._data.modules:
-            serial = self._data.modules[module_id].raw_data.get("serialNumber")
-            if serial:
-                return serial
-
-        # Try from metadata
-        if self._pool_metadata:
-            for module in self._pool_metadata.get("modules", []):
-                if module.get("id") == module_id:
-                    return module.get("serialNumber")
-
-        # Fallback to pool address
-        return self._pool_address
-
-    async def _send_module_name_update(
-        self, module_id: str, relay_id: str, module_name: str, headers: dict
-    ) -> None:
-        """Send module name update to remote."""
-        name_url = "https://myindygo.com/remote/module/name"
-        name_payload = {
-            "moduleId": module_id,
-            "relayId": relay_id,
-            "moduleName": module_name,
-        }
-        await self._request(
-            "POST",
-            name_url,
-            headers=headers,
-            data=json.dumps(name_payload),
-            return_json=True,
-            retry_auth=True,
-        )
-
-    async def _report_programs_sent(
-        self, module_id: str, programs: list[dict], headers: dict
-    ) -> None:
-        """Report programs data sent to server."""
-        report_prog_url = "https://myindygo.com/program/reportProgramsDataSent"
-        report_prog_payload = {
-            "module": module_id,
-            "programs": programs,
-        }
-        await self._request(
-            "POST",
-            report_prog_url,
-            headers=headers,
-            data=json.dumps(report_prog_payload),
-            return_json=True,
-            retry_auth=True,
-        )
-
-    async def _handle_off_mode_control(
-        self, module_id: str, full_program_data: dict
-    ) -> None:
-        """Handle remote control for OFF mode."""
-        mode_id = full_program_data.get("programCharacteristics", {}).get("mode")
-
-        # Only send remote control for OFF mode
-        if mode_id == 0:
-            module_serial = self._get_module_serial(module_id)
-            # Action: 1=Stop. Used to immediately stop the pump/light when set to OFF.
-            await self.async_send_remote_control("off", module_serial, action=1)
-
-    async def async_apply_module_changes(
-        self,
-        module_id: str,
-        relay_id: str | None,
-        programs: list[dict] | None = None,
-        full_program_data: dict | None = None,
-        module_name: str | None = None,
-    ) -> None:
-        """Apply changes to the remote module.
-
-        This triggers the synchronization between the Cloud and the physical device.
-        """
-        if not relay_id:
-            LOGGER.warning("Missing relay_id, skipping remote sync")
-            return
-
-        headers = self.JSON_HEADERS
-        LOGGER.debug(
-            "Applying remote changes for module %s (relay: %s)", module_id, relay_id
-        )
-
-        try:
-            # 1. Update module name if provided
-            if module_name:
-                await self._send_module_name_update(
-                    module_id, relay_id, module_name, headers
+            # 2. Push programs to device via cloud→gateway→LoRa relay
+            if self._pool_address and self._device_short_id:
+                url = (
+                    f"/api/module/{self._pool_address}/programs/{self._device_short_id}"
                 )
+                await self._api_post(url, {"programs": updated_programs})
 
-            # 2. Apply configuration to remote
-            url = "https://myindygo.com/remote/module/configuration/and/programs"
-            payload = {"moduleId": module_id, "relayId": relay_id}
-            await self._request(
-                "POST",
-                url,
-                headers=headers,
-                data=json.dumps(payload),
-                return_json=True,
-                retry_auth=True,
+            # 3. Report data sent
+            await self._api_post("/api/reportModuleDatasSent", {"module": module_id})
+            await self._api_post(
+                "/api/reportProgramsDatasSent",
+                {"module": module_id, "programs": updated_programs},
             )
 
-            # 3. Report module data sent
-            await self._request(
-                "POST",
-                "https://myindygo.com/module/reportModuleDataSent",
-                headers=headers,
-                data=json.dumps({"module": module_id}),
-                return_json=True,
-                retry_auth=True,
-            )
-
-            # 4. Report programs data sent
-            programs_to_report = programs or (
-                [full_program_data] if full_program_data else None
-            )
-            if programs_to_report:
-                await self._report_programs_sent(module_id, programs_to_report, headers)
-
-            # 5. Handle OFF mode remote control
-            if full_program_data:
-                await self._handle_off_mode_control(module_id, full_program_data)
-
-            # 6. LoRaWAN Synchronization for V2 modules
+            # 4. LoRaWAN sync for V2 modules
             if (
                 self._data
                 and module_id in self._data.modules
@@ -519,11 +409,14 @@ class IndygoPoolApiClient:
                 await self.async_synchronize_lorawan(
                     module_id, send_program=True, send_command=True
                 )
-            else:
-                LOGGER.debug("Skipping LoRaWAN sync for non-V2 module %s", module_id)
 
-        except IndygoPoolApiClientError as exception:
-            LOGGER.error("Failed to apply remote changes: %s", exception)
+        except IndygoPoolApiClientError as exc:
+            LOGGER.error("Failed to set filtration mode: %s", exc)
+            raise
+
+    # ------------------------------------------------------------------
+    # Remote control  (immediate on/off commands)
+    # ------------------------------------------------------------------
 
     async def async_send_remote_control(
         self,
@@ -532,22 +425,24 @@ class IndygoPoolApiClient:
         action: int = 1,
         **kwargs: Any,
     ) -> None:
-        """Send an immediate remote control command to force relay activation.
+        """Send an immediate remote control command.
 
         Args:
             mode: The mode to set ("on", "off", "auto").
-            module_serial: The serial number of the module to control.
-                If None, uses pool address.
-            action: The action code (1=Stop, 3=Forced March).
-            **kwargs: Additional parameters for the command (e.g. time, manualDuration).
+            module_serial: Serial number of the module.
+            action: Action code (1=Stop, 3=Forced March).
+            **kwargs: Additional parameters (e.g. time, manualDuration).
         """
         serial = module_serial or self._pool_address
         if not serial:
-            LOGGER.warning("Missing serial number, skipping immediate remote control")
+            LOGGER.warning("Missing serial number, skipping remote control")
             return
 
-        # Investigation shows specific action codes are used for different commands.
-        lines_control_item = {"index": 0, "mode": mode, "action": action}
+        lines_control_item: dict[str, Any] = {
+            "index": 0,
+            "mode": mode,
+            "action": action,
+        }
         if kwargs:
             lines_control_item.update(kwargs)
 
@@ -557,45 +452,19 @@ class IndygoPoolApiClient:
         }
 
         LOGGER.debug("Sending remote control: %s", payload)
-
-        await self._request(
-            "POST",
-            "https://myindygo.com/remote/module/control",
-            headers=self.JSON_HEADERS,
-            data=json.dumps(payload),
-            return_json=True,
-            retry_auth=True,
-        )
+        await self._api_post("/api/setManualCommandToSend", payload)
 
     async def async_synchronize_lorawan(
         self, module_id: str, send_program: bool = True, send_command: bool = True
     ) -> None:
-        """Trigger a LoRaWAN synchronization to push pending changes to the module.
-
-        Args:
-            module_id: The ID of the module to synchronize.
-            send_program: Whether to push program updates.
-            send_command: Whether to push manual command overrides.
-        """
-        url = "https://myindygo.com/modules/sendDataViaLoRaWAN"
+        """Trigger a LoRaWAN synchronization."""
         payload = {
             "moduleId": module_id,
             "sendProgram": send_program,
             "sendCommand": send_command,
         }
-
         LOGGER.debug("Triggering LoRaWAN sync: %s", payload)
-
         try:
-            await self._request(
-                "POST",
-                url,
-                headers=self.JSON_HEADERS,
-                data=json.dumps(payload),
-                return_json=True,
-                retry_auth=True,
-            )
-        except IndygoPoolApiClientError as exception:
-            LOGGER.error("LoRaWAN sync failed: %s", exception)
-            # We don't raise here as the preceding program update might have worked
-            # and the device will eventually sync on its own.
+            await self._api_post("/modules/sendDataViaLoRaWAN", payload)
+        except IndygoPoolApiClientError as exc:
+            LOGGER.error("LoRaWAN sync failed: %s", exc)

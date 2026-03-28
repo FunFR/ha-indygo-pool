@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import json
 import logging
-import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -32,239 +30,78 @@ def _get_nested(obj: dict | list | None, *keys: str) -> Any:
     return obj
 
 
-def _js_var_regex(var_name: str, delimiter: str = r"[{\[]") -> re.Pattern:
-    """Build a compiled regex to match a JS variable assignment."""
-    return re.compile(
-        rf"(?:var|let|const|window\.)\s*{var_name}\s*=\s*({delimiter})",
-        re.IGNORECASE,
-    )
-
-
 class IndygoParser:
     """Parser for Indygo Pool data."""
 
-    @staticmethod
-    def extract_json_object(text: str, start_index: int) -> str | None:
-        """Extract a JSON object or array from text starting at start_index.
-
-        This handles nested braces/brackets correctly to extract a full JSON
-        object or array string embedded within JavaScript.
-        """
-        brace_count = 0
-        in_string = False
-        escape = False
-        open_char = None
-        close_char = None
-
-        # Find the first opening brace/bracket
-        for i in range(start_index, len(text)):
-            if text[i] in "{[":
-                open_char = text[i]
-                close_char = "}" if open_char == "{" else "]"
-                start_index = i
-                break
-
-        if not open_char:
-            return None
-
-        for i in range(start_index, len(text)):
-            char = text[i]
-
-            if in_string:
-                if escape:
-                    escape = False
-                elif char == "\\":
-                    escape = True
-                elif char == '"':
-                    in_string = False
-            elif char == '"':
-                in_string = True
-            elif char == open_char:
-                brace_count += 1
-            elif char == close_char:
-                brace_count -= 1
-                if brace_count == 0:
-                    return text[start_index : i + 1]
-
-        return None
+    # ------------------------------------------------------------------
+    # Hardware ID resolution (from module list, no HTML needed)
+    # ------------------------------------------------------------------
 
     def _extract_device_ids(self, lr_pc: dict) -> tuple[str | None, str | None]:
-        """Extract device short ID and relay ID from lr-pc module.
-
-        Returns:
-            Tuple of (device_short_id, relay_id)
-        """
-        # Device Short ID: from name suffix or last 6 chars of serial
+        """Extract device short ID and relay ID from lr-pc module."""
         name_parts = lr_pc.get("name", "").split("-")
         if len(name_parts) > 1:
             device_short_id = name_parts[-1]
         else:
             device_short_id = lr_pc.get("serialNumber", "")[-6:]
 
-        # Relay ID: from relay field, fallback to device_short_id
         relay_id = lr_pc.get("relay") or device_short_id
-
         return device_short_id, relay_id
 
-    def _parse_lr_pc_module(
+    def _resolve_lr_pc(
         self, modules: list[dict]
     ) -> tuple[str | None, str | None, str | None]:
-        """Parse lr-pc module to extract pool address and IDs.
-
-        Returns:
-            Tuple of (pool_address, device_short_id, relay_id)
-        """
+        """Resolve IDs from lr-pc + gateway modules."""
         gateway = next((m for m in modules if m.get("type") == "lr-mb-10"), None)
         lr_pc = next((m for m in modules if m.get("type") == "lr-pc"), None)
 
         if not lr_pc:
             return None, None, None
 
-        # Use lr-pc as gateway if no dedicated gateway found
         if not gateway:
             gateway = lr_pc
 
         pool_address = gateway.get("serialNumber")
         device_short_id, relay_id = self._extract_device_ids(lr_pc)
-
         return pool_address, device_short_id, relay_id
 
-    def _parse_ipx_module(
+    def _resolve_ipx(
         self, modules: list[dict]
     ) -> tuple[str | None, str | None, str | None]:
-        """Parse IPX module as fallback.
-
-        Returns:
-            Tuple of (pool_address, device_short_id, relay_id)
-        """
+        """Resolve IDs from IPX module as fallback."""
         ipx = next((m for m in modules if m.get("type") == "ipx"), None)
         if not ipx:
             return None, None, None
 
         pool_address = ipx.get("serialNumber")
         device_short_id = ipx.get("ipxRelay")
-        relay_id = device_short_id  # For IPX, they're the same
-
+        relay_id = device_short_id
         return pool_address, device_short_id, relay_id
 
-    def parse_pool_ids(
-        self, html: str, pool_id: str
-    ) -> tuple[str | None, str | None, str | None, dict]:
-        """Parse HTML to find pool address, device short ID, and relay ID.
+    def resolve_hardware_ids(
+        self, modules: list[dict]
+    ) -> tuple[str | None, str | None, str | None]:
+        """Resolve pool_address, device_short_id and relay_id from modules.
+
+        Tries lr-pc first, falls back to IPX.
 
         Returns:
-            Tuple of (pool_address, device_short_id, relay_id, pool_metadata_dict)
+            Tuple of (pool_address, device_short_id, relay_id)
         """
-        match = _js_var_regex("currentPool").search(html)
-
-        json_str = None
-        pool_metadata = {}
-
-        if match:
-            start_index = match.start(1)
-            json_str = self.extract_json_object(html, start_index)
-
-        if json_str:
-            try:
-                pool_metadata = json.loads(json_str)
-            except json.JSONDecodeError as exc:
-                _LOGGER.error("Failed to decode currentPool JSON: %s", exc)
-                return None, None, None, {}
-        else:
-            match = _js_var_regex("modulesInPool", r"\[").search(html)
-            if match:
-                start_index = match.start(1)
-                json_str = self.extract_json_object(html, start_index)
-                if json_str:
-                    try:
-                        modules_list = json.loads(json_str)
-                        pool_metadata = {"modules": modules_list}
-                    except json.JSONDecodeError as exc:
-                        _LOGGER.error("Failed to decode modulesInPool JSON: %s", exc)
-                        return None, None, None, {}
-
-        if not pool_metadata:
-            return None, None, None, {}
-
-        # Extract module information
-        modules = pool_metadata.get("modules", [])
-        if not modules:
-            return None, None, None, {}
-
-        # Try lr-pc first, fallback to IPX
-        pool_address, device_short_id, relay_id = self._parse_lr_pc_module(modules)
+        pool_address, device_short_id, relay_id = self._resolve_lr_pc(modules)
         if not pool_address:
-            pool_address, device_short_id, relay_id = self._parse_ipx_module(modules)
+            pool_address, device_short_id, relay_id = self._resolve_ipx(modules)
 
         if not pool_address:
-            _LOGGER.error("No compatible module (lr-pc or ipx) found in modules list.")
+            _LOGGER.error(
+                "No compatible module (lr-pc or ipx) found in %d modules.",
+                len(modules),
+            )
+        return pool_address, device_short_id, relay_id
 
-        return pool_address, device_short_id, relay_id, pool_metadata
-
-    def parse_ipx_module(self, html: str) -> dict:
-        """Parse HTML to find ipxModule data (embedded JS)."""
-        ipx_metadata = {}
-
-        match = _js_var_regex("poolTechModulesIpx", r"\[").search(html)
-        if match and (json_str := self.extract_json_object(html, match.start(1))):
-            try:
-                modules_list = json.loads(json_str)
-                for m in modules_list:
-                    if m.get("type", "").startswith("ipx"):
-                        ipx_metadata = m
-                        return ipx_metadata
-            except json.JSONDecodeError as exc:
-                _LOGGER.error("Failed to decode poolTechModulesIpx JSON: %s", exc)
-
-        match = _js_var_regex("ipxModule", r"\{").search(html)
-        if match and (json_str := self.extract_json_object(html, match.start(1))):
-            try:
-                ipx_metadata = json.loads(json_str)
-                return ipx_metadata
-            except json.JSONDecodeError as exc:
-                _LOGGER.error("Failed to decode ipxModule JSON: %s", exc)
-
-        match = _js_var_regex("modulesInPool", r"\[").search(html)
-        if match and (json_str := self.extract_json_object(html, match.start(1))):
-            try:
-                modules_list = json.loads(json_str)
-                for m in modules_list:
-                    if m.get("type", "").startswith("ipx"):
-                        ipx_metadata = m
-                        break
-            except json.JSONDecodeError as exc:
-                _LOGGER.error("Failed to decode modulesInPool JSON: %s", exc)
-
-        return ipx_metadata
-
-    def parse_programs_from_html(self, html: str) -> dict[str, list[dict]]:
-        """Parse programs from embedded HTML JSON."""
-        programs_map: dict[str, list[dict]] = {}
-
-        match = _js_var_regex("poolCommand", r"\{").search(html)
-        if match and (json_str := self.extract_json_object(html, match.start(1))):
-            try:
-                data = json.loads(json_str)
-                programs = data.get("programs", [])
-                if isinstance(programs, list):
-                    for prog in programs:
-                        if m_id := prog.get("module"):
-                            programs_map.setdefault(m_id, []).append(prog)
-            except json.JSONDecodeError as exc:
-                _LOGGER.error("Failed to decode poolCommand JSON: %s", exc)
-            return programs_map
-
-        match = _js_var_regex("modulesInPool", r"\[").search(html)
-        if match and (json_str := self.extract_json_object(html, match.start(1))):
-            try:
-                for m in json.loads(json_str):
-                    programs = m.get("programs", [])
-                    m_id = str(m.get("id", ""))
-                    if programs and m_id:
-                        programs_map[m_id] = programs
-            except json.JSONDecodeError as exc:
-                _LOGGER.error("Failed to decode modulesInPool JSON: %s", exc)
-        return programs_map
+    # ------------------------------------------------------------------
+    # Main data parser
+    # ------------------------------------------------------------------
 
     @staticmethod
     def _find_filtration_module(
@@ -282,17 +119,16 @@ class IndygoParser:
         pool_id: str,
         pool_address: str,
         relay_id: str,
-        scraped_programs: dict[str, list[dict]] | None = None,
     ) -> IndygoPoolData:
         """Parse the API response into a structured IndygoPoolData object."""
         pool_data = IndygoPoolData(
             pool_id=pool_id, address=pool_address, relay_id=relay_id, raw_data=json_data
         )
 
-        # 1. Modules Data (Parsed first to allow sensors to be attached to them)
-        self._parse_modules(json_data, pool_data, scraped_programs)
+        # 1. Modules Data
+        self._parse_modules(json_data, pool_data)
 
-        # 2. Scraped IPX Data
+        # 2. IPX Data
         self._parse_scraped_ipx(json_data, pool_data)
 
         # 3. Main Pool Data — resolve filtration module once
@@ -302,6 +138,10 @@ class IndygoParser:
         self._parse_pool_status_list(json_data, pool_data, filt_module)
 
         return pool_data
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
 
     @staticmethod
     def _minutes_to_time(minutes: int) -> str:
@@ -336,10 +176,7 @@ class IndygoParser:
         temp_ref: int | None,
         dialog_ts: datetime | None,
     ) -> dict:
-        """Build filtration schedule attributes from temperatureSchedules and tempRef.
-
-        Returns a dict of extra attributes to merge into the filtration pool_status.
-        """
+        """Build filtration schedule attributes from temperatureSchedules."""
         if temp_ref is None or not filt_module.filtration_program:
             return {}
 
@@ -361,7 +198,6 @@ class IndygoParser:
         if start_min is None or end_min is None:
             return {}
 
-        # Build datetime values using dialogTimeStamp date
         schedule_start = self._minutes_to_time(start_min)
         schedule_end = self._minutes_to_time(end_min)
         if dialog_ts:
@@ -389,6 +225,10 @@ class IndygoParser:
             ],
         }
 
+    # ------------------------------------------------------------------
+    # Parsing sub-sections
+    # ------------------------------------------------------------------
+
     def _parse_pool_status_list(
         self,
         json_data: dict,
@@ -406,7 +246,6 @@ class IndygoParser:
             idx = item.get("index")
             val = item.get("value")
 
-            # Index 0 is Filtration
             if idx == 0:
                 temp_ref = item.get("tempRef")
                 remaining_time = item.get("time")
@@ -417,7 +256,6 @@ class IndygoParser:
                     "tempRef": temp_ref,
                 }
 
-                # Merge schedule attributes into filtration status
                 if filt_module:
                     dialog_ts = self._parse_dialog_timestamp(
                         json_data.get("dialogTimeStamp")
@@ -434,7 +272,6 @@ class IndygoParser:
                     extra_attributes=extra_attributes,
                 )
 
-                # Remaining filtration time in minutes
                 if remaining_time and filt_module:
                     remaining_minutes = self._parse_remaining_time(remaining_time)
                     if remaining_minutes is not None:
@@ -463,7 +300,6 @@ class IndygoParser:
         for key, config in root_sensors_map.items():
             if key in json_data and json_data[key] is not None:
                 extra_attributes = {}
-                # Handle attributes mapping
                 attr_map = config.get("attributes", {})
                 for source_key, target_key in attr_map.items():
                     if source_key in json_data:
@@ -493,7 +329,6 @@ class IndygoParser:
             idx = sensor_item.get("index")
             val = sensor_item.get("value")
             if idx == 0 and val is not None:
-                # Index 0 is water temperature in 1/100th of degree
                 temp_c = val / 100.0
                 if "temperature" in target_sensors:
                     target_sensors["temperature"].value = temp_c
@@ -507,65 +342,56 @@ class IndygoParser:
         self,
         json_data: dict,
         pool_data: IndygoPoolData,
-        scraped_programs: dict[str, list[dict]] | None = None,
     ) -> None:
         """Parse modules list."""
-        if "modules" in json_data:
-            for module in json_data["modules"]:
-                m_id = module.get("id")
-                m_type = module.get("type", "unknown")
-                m_name = module.get("name", f"Module {m_id}")
+        if "modules" not in json_data:
+            return
+        for module in json_data["modules"]:
+            m_id = module.get("id")
+            m_type = module.get("type", "unknown")
+            m_name = module.get("name", f"Module {m_id}")
 
-                indygo_module = IndygoModuleData(
-                    id=str(m_id), type=m_type, name=m_name, raw_data=module
-                )
+            indygo_module = IndygoModuleData(
+                id=str(m_id), type=m_type, name=m_name, raw_data=module
+            )
 
-                # IPX Data
-                if m_type == "ipx" and "ipxData" in module:
-                    ipx_data = module["ipxData"]
-                    if "totalElectrolyseDuration" in ipx_data:
-                        indygo_module.sensors["totalElectrolyseDuration"] = (
-                            IndygoSensorData(
-                                key="totalElectrolyseDuration",
-                                value=ipx_data["totalElectrolyseDuration"],
-                            )
+            # IPX Data
+            if m_type == "ipx" and "ipxData" in module:
+                ipx_data = module["ipxData"]
+                if "totalElectrolyseDuration" in ipx_data:
+                    indygo_module.sensors["totalElectrolyseDuration"] = (
+                        IndygoSensorData(
+                            key="totalElectrolyseDuration",
+                            value=ipx_data["totalElectrolyseDuration"],
                         )
+                    )
 
-                # Programs parsing
-                programs = []
-                if "programs" in module:
-                    programs = module["programs"]
-                elif scraped_programs and str(m_id) in scraped_programs:
-                    # fallback to scraped programs
-                    programs = scraped_programs[str(m_id)]
+            # Programs
+            programs = module.get("programs", [])
+            if programs:
+                indygo_module.programs = programs
+                for prog in programs:
+                    if (
+                        "programCharacteristics" in prog
+                        and prog["programCharacteristics"].get("programType")
+                        == PROGRAM_TYPE_FILTRATION
+                    ):
+                        indygo_module.filtration_program = prog
+                        break
 
-                if programs:
-                    indygo_module.programs = programs
-                    # Find filtration program (type 4)
-                    for prog in programs:
-                        if (
-                            "programCharacteristics" in prog
-                            and prog["programCharacteristics"].get("programType")
-                            == PROGRAM_TYPE_FILTRATION
-                        ):
-                            indygo_module.filtration_program = prog
-                            break
-
-                pool_data.modules[str(m_id)] = indygo_module
+            pool_data.modules[str(m_id)] = indygo_module
 
     def _parse_scraped_ipx(self, json_data: dict, pool_data: IndygoPoolData) -> None:
-        """Parse scraped ipx_module data."""
+        """Parse ipx_module data."""
         if "ipx_module" not in json_data:
             return
 
         ipx_mod = json_data["ipx_module"]
         outputs = ipx_mod.get("outputs", [])
 
-        # Find IPX module to attach sensors
         ipx_module = next(
             (m for m in pool_data.modules.values() if m.type == "ipx"), None
         )
-        # Fallback to root sensors if no module found
         target_sensors = ipx_module.sensors if ipx_module else pool_data.sensors
 
         salt = _get_nested(outputs, 1, "ipxData", "saltValue")
