@@ -35,6 +35,6 @@ jobs:
           zip -r ../../indygo_pool.zip . -x '*.pyc' -x '__pycache__/*'
 
       - name: Upload zip to release
-        uses: softprops/action-gh-release@7b4da11513bf3f43f9999e90eabced41ab8f3c11 # v2
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2.6.1
         with:
           files: indygo_pool.zip
