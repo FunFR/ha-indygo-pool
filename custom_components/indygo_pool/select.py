@@ -4,13 +4,19 @@ from __future__ import annotations
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.event import async_call_later
 
 from .const import DOMAIN, LOGGER
 from .coordinator import IndygoPoolDataUpdateCoordinator
 from .entity import IndygoPoolEntity
 from .models import IndygoModuleData
+
+# Delay (seconds) before a follow-up refresh after a mode change.
+# The command travels cloud → gateway → LoRa → device, so the status
+# endpoint may still return the old state right after the API call.
+DELAYED_REFRESH_SECONDS = 10
 
 # Mapping: Mode -> Integer
 MODE_OFF = "Off"
@@ -69,6 +75,7 @@ class IndygoPoolSelect(IndygoPoolEntity, SelectEntity):
         self._attr_translation_key = "filtration_mode"
         self._attr_unique_id = self._build_unique_id("filtration_mode")
         self.entity_id = f"select.{self.device_name_slug}_filtration_mode"
+        self._cancel_delayed_refresh: CALLBACK_TYPE | None = None
 
     @property
     def current_option(self) -> str | None:
@@ -110,5 +117,25 @@ class IndygoPoolSelect(IndygoPoolEntity, SelectEntity):
             self._module_id, module.filtration_program, mode_int
         )
 
-        # Trigger refresh
+        # Trigger immediate refresh
+        await self.coordinator.async_request_refresh()
+
+        # Schedule a delayed refresh to capture the device state after
+        # the command has propagated through cloud → gateway → LoRa.
+        self._schedule_delayed_refresh()
+
+    def _schedule_delayed_refresh(self) -> None:
+        """Schedule a coordinator refresh after a delay."""
+        if self._cancel_delayed_refresh:
+            self._cancel_delayed_refresh()
+
+        self._cancel_delayed_refresh = async_call_later(
+            self.hass,
+            DELAYED_REFRESH_SECONDS,
+            self._async_delayed_refresh,
+        )
+
+    async def _async_delayed_refresh(self, _now: object) -> None:
+        """Perform the delayed coordinator refresh."""
+        self._cancel_delayed_refresh = None
         await self.coordinator.async_request_refresh()
