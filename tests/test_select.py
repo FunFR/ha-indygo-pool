@@ -1,6 +1,6 @@
 """Tests for the Indygo Pool select entity."""
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.config_entries import ConfigEntry
@@ -9,6 +9,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from custom_components.indygo_pool.models import IndygoModuleData, IndygoPoolData
 from custom_components.indygo_pool.select import (
+    DELAYED_REFRESH_SECONDS,
     MODE_AUTO,
     MODE_OFF,
     MODE_ON,
@@ -115,15 +116,78 @@ class TestIndygoPoolSelect:
 
         entity = IndygoPoolSelect(mock_coordinator, module_id, "Pump")
 
-        # Select Auto
-        await entity.async_select_option(MODE_AUTO)
+        with patch(
+            "custom_components.indygo_pool.select.async_call_later"
+        ) as mock_call_later:
+            await entity.async_select_option(MODE_AUTO)
 
         # Verify API called with correct args (mode 2 for Auto)
         mock_coordinator.client.async_set_filtration_mode.assert_called_once_with(
             module_id, filtration_program, 2
         )
-        # Verify refresh requested
+        # Verify immediate refresh requested
         mock_coordinator.async_request_refresh.assert_called_once()
+        # Verify delayed refresh scheduled
+        mock_call_later.assert_called_once()
+        args = mock_call_later.call_args
+        assert args[0][1] == DELAYED_REFRESH_SECONDS
+
+    @pytest.mark.asyncio
+    async def test_delayed_refresh_cancels_previous(self, mock_coordinator):
+        """Test that a new mode change cancels the previous delayed refresh."""
+        module_id = "mod1"
+        filtration_program = {"programCharacteristics": {"mode": 0}}
+        mock_coordinator.data.modules = {
+            module_id: IndygoModuleData(
+                id=module_id,
+                type="lr-pc",
+                name="Pump",
+                filtration_program=filtration_program,
+            )
+        }
+
+        entity = IndygoPoolSelect(mock_coordinator, module_id, "Pump")
+
+        cancel_cb = MagicMock()
+        with patch(
+            "custom_components.indygo_pool.select.async_call_later",
+            return_value=cancel_cb,
+        ):
+            await entity.async_select_option(MODE_ON)
+            # First delayed refresh scheduled, not cancelled yet
+            cancel_cb.assert_not_called()
+
+            await entity.async_select_option(MODE_AUTO)
+            # Previous delayed refresh should have been cancelled
+            cancel_cb.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_delayed_refresh_callback(self, mock_coordinator):
+        """Test the delayed refresh callback triggers a coordinator refresh."""
+        module_id = "mod1"
+        mock_coordinator.data.modules = {
+            module_id: IndygoModuleData(
+                id=module_id,
+                type="lr-pc",
+                name="Pump",
+                filtration_program={"programCharacteristics": {"mode": 0}},
+            )
+        }
+
+        entity = IndygoPoolSelect(mock_coordinator, module_id, "Pump")
+
+        with patch(
+            "custom_components.indygo_pool.select.async_call_later"
+        ) as mock_call_later:
+            await entity.async_select_option(MODE_ON)
+
+        # Extract and call the delayed refresh callback
+        callback = mock_call_later.call_args[0][2]
+        mock_coordinator.async_request_refresh.reset_mock()
+        await callback(None)
+
+        mock_coordinator.async_request_refresh.assert_called_once()
+        assert entity._cancel_delayed_refresh is None
 
     @pytest.mark.asyncio
     async def test_select_option_invalid(self, mock_coordinator):
