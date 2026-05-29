@@ -253,6 +253,12 @@ class IndygoPoolApiClient:
         )
         return data.get("programs", [])
 
+    async def _fetch_pool_status(self) -> dict:
+        """Fetch pool status via /api/getPoolStatus."""
+        return await self._api_post(
+            "/api/getPoolStatus",  {"id": self._pool_id}
+        )
+
     async def _resolve_hardware_ids(self, modules: list[dict]) -> None:
         """Resolve pool_address, device_short_id and relay_id from modules."""
         if self._pool_address and self._device_short_id and self._relay_id:
@@ -291,15 +297,7 @@ class IndygoPoolApiClient:
         await asyncio.gather(*[_attach_programs(m) for m in modules])
 
         # 4. Fetch live status data from the device endpoint
-        url = (
-            f"{BASE_URL}/v1/module/{self._pool_address}/status/{self._device_short_id}"
-        )
-        status_data = await self._request(
-            "GET",
-            url,
-            headers={"x-requested-with": "XMLHttpRequest"},
-            return_json=True,
-        )
+        status_data = await self._fetch_pool_status()
 
         # 5. Merge modules metadata into the status data
         status_data["modules"] = modules
