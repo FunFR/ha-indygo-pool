@@ -291,7 +291,7 @@ class IndygoParser:
         """Parse root level sensors."""
         root_sensors_map = {
             "temperature": {
-                "attributes": {"temperatureTime": "last_measurement_time"},
+                "attributes": {"date": "last_measurement_time"},
             },
         }
 
@@ -299,15 +299,16 @@ class IndygoParser:
 
         for key, config in root_sensors_map.items():
             if key in json_data and json_data[key] is not None:
+                temperature = json_data[key]
                 extra_attributes = {}
                 attr_map = config.get("attributes", {})
                 for source_key, target_key in attr_map.items():
-                    if source_key in json_data:
-                        extra_attributes[target_key] = json_data[source_key]
+                    if source_key in temperature:
+                        extra_attributes[target_key] = temperature[source_key]
 
                 target_sensors[key] = IndygoSensorData(
                     key=key,
-                    value=json_data[key],
+                    value=temperature["value"],
                     extra_attributes=extra_attributes,
                 )
 
