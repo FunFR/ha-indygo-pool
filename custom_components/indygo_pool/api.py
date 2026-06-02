@@ -257,6 +257,22 @@ class IndygoPoolApiClient:
         """Fetch pool status via /api/getPoolStatus."""
         return await self._api_post("/api/getPoolStatus", {"id": self._pool_id})
 
+    async def _fetch_device_status(self) -> dict:
+        """Fetch live device status via /v1/module (pump circuits, sensorState).
+
+        Some hardware returns 408 — callers must handle
+        IndygoPoolApiClientCommunicationError.
+        """
+        url = (
+            f"{BASE_URL}/v1/module/{self._pool_address}/status/{self._device_short_id}"
+        )
+        return await self._request(
+            "GET",
+            url,
+            headers={"x-requested-with": "XMLHttpRequest"},
+            return_json=True,
+        )
+
     async def _resolve_hardware_ids(self, modules: list[dict]) -> None:
         """Resolve pool_address, device_short_id and relay_id from modules."""
         if self._pool_address and self._device_short_id and self._relay_id:
@@ -294,8 +310,21 @@ class IndygoPoolApiClient:
 
         await asyncio.gather(*[_attach_programs(m) for m in modules])
 
-        # 4. Fetch live status data from the device endpoint
+        # 4. Fetch pool status (works for all hardware)
         status_data = await self._fetch_pool_status()
+
+        # 4b. Merge pump circuit data from device endpoint when available.
+        # Some hardware returns 408 — skip gracefully in that case.
+        try:
+            device_status = await self._fetch_device_status()
+            for key in ("pool", "sensorState", "dialogTimeStamp"):
+                if key in device_status:
+                    status_data[key] = device_status[key]
+        except IndygoPoolApiClientCommunicationError:
+            LOGGER.debug(
+                "Device status endpoint unavailable for %s — pump circuits skipped",
+                self._pool_address,
+            )
 
         # 5. Merge modules metadata into the status data
         status_data["modules"] = modules
