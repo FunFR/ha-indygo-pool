@@ -20,6 +20,13 @@ TEST_DATE = "2023-01-01T12:00:00Z"
 FILTRATION_PROGRAM_TYPE = 4
 MODE_AUTO = 2
 MODE_ON = 1
+# Constants for getPoolStatus hardware variant (lr-mb-10 + lr-pc-vs2 + ipx)
+TEST_TEMP_IPX = 24.96
+TEST_ELECTROLYSIS_IPX = 209
+TEST_PH_IPX = 7.3
+TEST_SALT_IPX = 3.3
+TEST_PH_SETPOINT_IPX = 7.2
+TEST_PROD_SETPOINT_IPX = 100
 
 
 class TestIndygoParser:
@@ -85,8 +92,7 @@ class TestIndygoParser:
         """Test parsing API JSON into IndygoPoolData."""
         parser = IndygoParser()
         json_data = {
-            "temperature": TEST_TEMP_VALUE,
-            "temperatureTime": TEST_DATE,
+            "temperature": {"date": TEST_DATE, "value": TEST_TEMP_VALUE},
             "sensorState": [{"index": 0, "value": TEST_SENSOR_STATE_TEMP}],
             "ph": TEST_PH_VALUE,
             "modules": [
@@ -552,6 +558,90 @@ class TestIndygoParser:
             "RELAY1",
         )
         assert "ipx_salt" not in data.sensors
+
+    def test_parse_data_getpoolstatus_format(self):
+        """Test parsing getPoolStatus response: temperature as dict, no sensorState.
+
+        Represents hardware: lr-mb-10 + lr-pc-vs2 + ipx (reported by contributor
+        ugorenner — anonymized). getPoolStatus returns temperature as
+        {"date": ..., "value": ...} with no sensorState array.
+        """
+        parser = IndygoParser()
+        json_data = {
+            "temperature": {"date": TEST_DATE, "value": TEST_TEMP_IPX},
+            "modules": [
+                {
+                    "id": "GW1",
+                    "type": "lr-mb-10",
+                    "name": "Gateway",
+                    "serialNumber": "GW_SERIAL",
+                },
+                {
+                    "id": "PUMP1",
+                    "type": "lr-pc-vs2",
+                    "name": "Pool Pump",
+                    "relay": "RELAY_ID",
+                    "programs": [
+                        {
+                            "programCharacteristics": {
+                                "programType": FILTRATION_PROGRAM_TYPE,
+                                "mode": MODE_AUTO,
+                            }
+                        }
+                    ],
+                },
+                {
+                    "id": "IPX1",
+                    "type": "ipx",
+                    "name": "Electrolyzer",
+                    "ipxData": {"totalElectrolyseDuration": TEST_ELECTROLYSIS_IPX},
+                },
+            ],
+            "ipx_module": {
+                "outputs": [
+                    {"ipxData": {"pHSetpoint": TEST_PH_SETPOINT_IPX}},
+                    {
+                        "ipxData": {
+                            "saltValue": TEST_SALT_IPX,
+                            "percentageSetpoint": TEST_PROD_SETPOINT_IPX,
+                            "electrolyzerMode": MODE_AUTO,
+                        }
+                    },
+                ],
+                "inputs": [
+                    {"name": "", "type": 0},
+                    {
+                        "name": "",
+                        "type": 6,
+                        "lastValue": {"value": TEST_PH_IPX, "date": TEST_DATE},
+                    },
+                ],
+            },
+        }
+
+        pool_data = parser.parse_data(json_data, "POOL1", "GW_SERIAL", "RELAY_ID")
+
+        # Temperature populates on filtration module (lr-pc-vs2) from dict format
+        assert "PUMP1" in pool_data.modules
+        pump_mod = pool_data.modules["PUMP1"]
+        assert pump_mod.sensors["temperature"].value == TEST_TEMP_IPX
+        assert (
+            pump_mod.sensors["temperature"].extra_attributes["last_measurement_time"]
+            == TEST_DATE
+        )
+        assert pump_mod.filtration_program is not None
+
+        # pool_status_circuits empty (no pool/sensorState in getPoolStatus response)
+        assert pump_mod.pool_status == {}
+        assert pool_data.pool_status == {}
+
+        # IPX sensors populated
+        assert "IPX1" in pool_data.modules
+        ipx_mod = pool_data.modules["IPX1"]
+        electrolysis_val = ipx_mod.sensors["totalElectrolyseDuration"].value
+        assert electrolysis_val == TEST_ELECTROLYSIS_IPX
+        assert ipx_mod.sensors["ph"].value == TEST_PH_IPX
+        assert ipx_mod.sensors["ipx_salt"].value == TEST_SALT_IPX
 
 
 class TestGetNested:

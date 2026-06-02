@@ -179,9 +179,9 @@ async def test_get_data_success():
             payload={"programs": []},
         )
         # Mock status data
-        m.get(
-            f"{BASE_URL}/v1/module/{TEST_POOL_ADDRESS}/status/ABC",
-            payload={"temperature": 25.5},
+        m.post(
+            f"{BASE_URL}/api/getPoolStatus",
+            payload={"temperature": {"date": "2023-01-01T12:00:00Z", "value": 25.5}},
         )
 
         async with aiohttp.ClientSession() as session:
@@ -221,18 +221,12 @@ async def test_get_data_resolves_hardware_ids_once():
         m.post(f"{BASE_URL}/api/getUserWithHisModules", payload=MODULES_RESPONSE)
         m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
         m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
-        m.get(
-            f"{BASE_URL}/v1/module/{TEST_POOL_ADDRESS}/status/ABC",
-            payload={},
-        )
+        m.post(f"{BASE_URL}/api/getPoolStatus", payload={})
         # Second call
         m.post(f"{BASE_URL}/api/getUserWithHisModules", payload=MODULES_RESPONSE)
         m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
         m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
-        m.get(
-            f"{BASE_URL}/v1/module/{TEST_POOL_ADDRESS}/status/ABC",
-            payload={},
-        )
+        m.post(f"{BASE_URL}/api/getPoolStatus", payload={})
 
         async with aiohttp.ClientSession() as session:
             client = _make_client(session)
@@ -478,7 +472,7 @@ async def test_auto_refresh_on_401():
         m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
         m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
         # Status
-        m.get(f"{BASE_URL}/v1/module/{TEST_POOL_ADDRESS}/status/ABC", payload={})
+        m.post(f"{BASE_URL}/api/getPoolStatus", payload={})
 
         async with aiohttp.ClientSession() as session:
             client = _make_client(session)
@@ -589,7 +583,7 @@ async def test_get_data_with_ipx_module():
         m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
         m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
         m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
-        m.get(f"{BASE_URL}/v1/module/{TEST_POOL_ADDRESS}/status/ABC", payload={})
+        m.post(f"{BASE_URL}/api/getPoolStatus", payload={})
 
         async with aiohttp.ClientSession() as session:
             client = _make_client(session)

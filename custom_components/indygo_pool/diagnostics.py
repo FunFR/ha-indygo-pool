@@ -40,7 +40,7 @@ _NOISE_KEYS = frozenset(
 )
 
 # Extra keys to drop from pool_data.raw_data (already surfaced via "modules").
-_RAW_STATUS_SKIP = _NOISE_KEYS | {"modules", "ipx_module"}
+_RAW_STATUS_SKIP = _NOISE_KEYS | {"modules", "ipx_module", "professional", "agency"}
 
 
 def _sanitize(raw: dict, skip: frozenset[str]) -> dict:
