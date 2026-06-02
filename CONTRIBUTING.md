@@ -69,6 +69,18 @@ Then run the integration tests using:
 uv run pytest -s -m integration tests
 ```
 
+### Sharing Diagnostics
+
+When reporting a bug or requesting support for unknown hardware, include the integration diagnostics:
+
+1. Go to **Settings → Devices & Services → Indygo Pool**
+2. Click the **⋮** menu → **Download diagnostics**
+3. Attach the JSON to your GitHub issue
+
+The diagnostics include raw module data (`inputs`, `outputs`, `ipxData`) that reveals what sensors and controls each hardware device exposes, without requiring physical access to the hardware.
+
+> **Before sharing:** review the JSON and remove anything you consider sensitive. The integration filters common PII fields (email, address, coordinates, MAC address, etc.), but cannot determine what is confidential for you.
+
 ### Manual Config Testing (Docker)
 1. Start the Home Assistant container: `docker compose up -d`
 2. Access Home Assistant at [http://localhost:8123](http://localhost:8123).
