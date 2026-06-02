@@ -255,9 +255,7 @@ class IndygoPoolApiClient:
 
     async def _fetch_pool_status(self) -> dict:
         """Fetch pool status via /api/getPoolStatus."""
-        return await self._api_post(
-            "/api/getPoolStatus",  {"id": self._pool_id}
-        )
+        return await self._api_post("/api/getPoolStatus", {"id": self._pool_id})
 
     async def _resolve_hardware_ids(self, modules: list[dict]) -> None:
         """Resolve pool_address, device_short_id and relay_id from modules."""
