@@ -113,6 +113,25 @@ async def test_api_client_authentication():
         assert isinstance(data, IndygoPoolData)
         assert data.pool_id == pool_id
 
+        # At least one module must be present
+        assert len(data.modules) > 0
+
+        # Filtration module checks
+        filt_modules = [
+            m for m in data.modules.values() if m.filtration_program is not None
+        ]
+        if filt_modules:
+            filt_mod = filt_modules[0]
+            assert "temperature" in filt_mod.sensors, (
+                "Filtration module missing temperature"
+            )
+            # pool_status populated when /v1/module is reachable
+            assert "0" in filt_mod.pool_status, (
+                "Filtration module missing pool_status"
+                " — /v1/module fallback may have failed"
+            )
+            assert "filtration_remaining_time" in filt_mod.sensors
+
 
 # ---------------------------------------------------------------------------
 # Login tests
@@ -179,9 +198,9 @@ async def test_get_data_success():
             payload={"programs": []},
         )
         # Mock status data
-        m.get(
-            f"{BASE_URL}/v1/module/{TEST_POOL_ADDRESS}/status/ABC",
-            payload={"temperature": 25.5},
+        m.post(
+            f"{BASE_URL}/api/getPoolStatus",
+            payload={"temperature": {"date": "2023-01-01T12:00:00Z", "value": 25.5}},
         )
 
         async with aiohttp.ClientSession() as session:
@@ -221,18 +240,12 @@ async def test_get_data_resolves_hardware_ids_once():
         m.post(f"{BASE_URL}/api/getUserWithHisModules", payload=MODULES_RESPONSE)
         m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
         m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
-        m.get(
-            f"{BASE_URL}/v1/module/{TEST_POOL_ADDRESS}/status/ABC",
-            payload={},
-        )
+        m.post(f"{BASE_URL}/api/getPoolStatus", payload={})
         # Second call
         m.post(f"{BASE_URL}/api/getUserWithHisModules", payload=MODULES_RESPONSE)
         m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
         m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
-        m.get(
-            f"{BASE_URL}/v1/module/{TEST_POOL_ADDRESS}/status/ABC",
-            payload={},
-        )
+        m.post(f"{BASE_URL}/api/getPoolStatus", payload={})
 
         async with aiohttp.ClientSession() as session:
             client = _make_client(session)
@@ -478,7 +491,7 @@ async def test_auto_refresh_on_401():
         m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
         m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
         # Status
-        m.get(f"{BASE_URL}/v1/module/{TEST_POOL_ADDRESS}/status/ABC", payload={})
+        m.post(f"{BASE_URL}/api/getPoolStatus", payload={})
 
         async with aiohttp.ClientSession() as session:
             client = _make_client(session)
@@ -589,7 +602,7 @@ async def test_get_data_with_ipx_module():
         m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
         m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
         m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
-        m.get(f"{BASE_URL}/v1/module/{TEST_POOL_ADDRESS}/status/ABC", payload={})
+        m.post(f"{BASE_URL}/api/getPoolStatus", payload={})
 
         async with aiohttp.ClientSession() as session:
             client = _make_client(session)
@@ -716,3 +729,92 @@ async def test_set_filtration_mode_invalid_program():
         bad_program = {"id": "prog_bad"}
         with pytest.raises(IndygoPoolApiClientError, match="programCharacteristics"):
             await client.async_set_filtration_mode(TEST_MODULE_ID, bad_program, 1)
+
+
+# ---------------------------------------------------------------------------
+# Device status fallback tests
+# ---------------------------------------------------------------------------
+
+# device_short_id = last segment of lr-pc name ("Pump-ABC" → "ABC")
+_LR_PC_DEVICE_SHORT_ID = MODULES_RESPONSE["modules"][0]["name"].split("-")[-1]
+DEVICE_STATUS_URL = (
+    f"{BASE_URL}/v1/module/{TEST_POOL_ADDRESS}/status/{_LR_PC_DEVICE_SHORT_ID}"
+)
+
+
+@pytest.mark.asyncio
+async def test_get_data_device_status_merged():
+    """pool/sensorState from /v1/module are merged into parsed data when available."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    with aioresponses() as m:
+        m.post(f"{BASE_URL}/api/getUserWithHisModules", payload=MODULES_RESPONSE)
+        m.post(
+            f"{BASE_URL}/api/getModuleWithHisPrograms",
+            payload={
+                "programs": [{"programCharacteristics": {"programType": 4, "mode": 2}}]
+            },
+        )
+        m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
+        m.post(
+            f"{BASE_URL}/api/getPoolStatus",
+            payload={"temperature": {"date": "2023-01-01T12:00:00Z", "value": 25.5}},
+        )
+        m.get(
+            DEVICE_STATUS_URL,
+            payload={
+                "pool": [
+                    {"index": 0, "value": 1, "info": "Filtration", "time": "02:30"}
+                ],
+                "sensorState": [{"index": 0, "value": 2500}],
+            },
+        )
+
+        async with aiohttp.ClientSession() as session:
+            client = _make_client(session)
+            data = await client.async_get_data()
+
+        filt_mod = data.modules[TEST_MODULE_ID]
+        assert "0" in filt_mod.pool_status, (
+            "pool_status missing — /v1/module data not merged"
+        )
+        # sensorState [{"index": 0, "value": 2500}] → 25.0°C
+        expected_temp_merged = 2500 / 100.0
+        assert filt_mod.pool_status["0"].value == 1
+        assert filt_mod.sensors["temperature"].value == expected_temp_merged
+        assert "filtration_remaining_time" in filt_mod.sensors
+
+
+@pytest.mark.asyncio
+async def test_get_data_device_status_408_no_crash():
+    """408 from /v1/module is silently skipped — no pool_status, no exception."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    with aioresponses() as m:
+        m.post(f"{BASE_URL}/api/getUserWithHisModules", payload=MODULES_RESPONSE)
+        m.post(
+            f"{BASE_URL}/api/getModuleWithHisPrograms",
+            payload={
+                "programs": [{"programCharacteristics": {"programType": 4, "mode": 2}}]
+            },
+        )
+        m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
+        m.post(
+            f"{BASE_URL}/api/getPoolStatus",
+            payload={"temperature": {"date": "2023-01-01T12:00:00Z", "value": 24.96}},
+        )
+        m.get(DEVICE_STATUS_URL, status=408)
+
+        async with aiohttp.ClientSession() as session:
+            client = _make_client(session)
+            data = await client.async_get_data()
+
+        filt_mod = data.modules[TEST_MODULE_ID]
+        assert filt_mod.pool_status == {}, (
+            "pool_status should be empty when /v1/module returns 408"
+        )
+        # temperature from getPoolStatus dict format
+        expected_temp_fallback = 24.96
+        assert filt_mod.sensors["temperature"].value == expected_temp_fallback
