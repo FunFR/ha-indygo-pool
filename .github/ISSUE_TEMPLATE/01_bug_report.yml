@@ -59,3 +59,13 @@ body:
             custom_components.indygo_pool: debug
         ```
       render: yaml
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: |
+        Go to **Settings → Devices & Services → Indygo Pool → ⋮ → Download diagnostics** and paste the JSON content here.
+        This helps identify your hardware without needing physical access to it.
+
+        > **Before sharing:** review the JSON and remove any information you consider sensitive (module names, serial numbers, location data, etc.). The integration filters common PII fields, but it cannot know what is confidential for you.
+      render: json
