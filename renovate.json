@@ -16,7 +16,8 @@
                 "minor",
                 "patch",
                 "pin",
-                "digest"
+                "digest",
+                "lockFileMaintenance"
             ],
             "automerge": true,
             "automergeType": "branch"

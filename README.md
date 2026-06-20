@@ -16,8 +16,11 @@ Indygo Pool is a custom integration for Home Assistant that allows you to monito
 
 - **Temperature Monitoring**: Keep an eye on your pool's water temperature.
 - **pH & Salt levels**: Monitor the chemical balance of your pool.
+- **Redox (ORP)**: Monitor the oxidation-reduction potential of your pool water.
+- **Filter Pressure**: Track filter pressure from Pool Command module inputs.
 - **Electrolyser Status**: Monitor the production status.
 - **Filtration Control**: Switch between Auto, Manual ON, and Manual OFF modes.
+- **Pool Command VS² support**: Compatible with `lr-pc-vs2` hardware variants.
 
 ## Installation
 
