@@ -301,6 +301,24 @@ class TestIndygoParser:
         mod = pool_data.modules["MOD_123"]
         assert mod.sensors["filter_pressure"].value == TEST_PRESSURE_ALT_VALUE
 
+    def test_parse_input_sensors_ignores_non_list_inputs(self):
+        """Test non-list inputs are ignored."""
+        target = {}
+        IndygoParser._parse_input_sensors(None, target)
+        assert target == {}
+
+    def test_parse_input_sensors_skips_invalid_measurements(self):
+        """Test inputs with invalid or missing measurements are skipped."""
+        target = {}
+        IndygoParser._parse_input_sensors(
+            [
+                {"type": 7, "lastValue": "not-a-dict"},
+                {"type": 8, "lastComputedMeasure": {"value": None}},
+            ],
+            target,
+        )
+        assert target == {}
+
     def test_parse_filtration_schedule_as_attributes(self):
         """Test schedule is exposed as attributes on the filtration status."""
         parser = IndygoParser()
