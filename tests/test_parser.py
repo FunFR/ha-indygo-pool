@@ -27,6 +27,9 @@ TEST_PH_IPX = 7.3
 TEST_SALT_IPX = 3.3
 TEST_PH_SETPOINT_IPX = 7.2
 TEST_PROD_SETPOINT_IPX = 100
+TEST_REDOX_VALUE = 720
+TEST_PRESSURE_VALUE = 1.2
+TEST_PRESSURE_ALT_VALUE = 1.3
 
 
 class TestIndygoParser:
@@ -44,6 +47,27 @@ class TestIndygoParser:
             {
                 "type": "lr-pc",
                 "serialNumber": "LRPC123",
+                "name": "Pool-ABC",
+                "relay": TEST_RELAY_ID,
+            },
+        ]
+        pool_address, device_short_id, relay_id = parser.resolve_hardware_ids(modules)
+        assert pool_address == TEST_GATEWAY_SERIAL
+        assert device_short_id == TEST_RELAY_ID
+        assert relay_id == TEST_RELAY_ID
+
+    def test_resolve_hardware_ids_lr_pc_vs2(self):
+        """Test resolving hardware IDs from lr-pc-vs2 modules."""
+        parser = IndygoParser()
+        modules = [
+            {
+                "type": "lr-mb-10",
+                "serialNumber": TEST_GATEWAY_SERIAL,
+                "name": "Gateway-01",
+            },
+            {
+                "type": "lr-pc-vs2",
+                "serialNumber": "LRPCVS2123",
                 "name": "Pool-ABC",
                 "relay": TEST_RELAY_ID,
             },
@@ -75,6 +99,14 @@ class TestIndygoParser:
         """Test lr-pc acts as gateway when no dedicated gateway."""
         parser = IndygoParser()
         a, b, c = parser._resolve_lr_pc([{"type": "lr-pc", "serialNumber": "123456"}])
+        assert a == "123456"
+
+    def test_resolve_lr_pc_vs2_acts_as_gateway(self):
+        """Test lr-pc-vs2 acts as gateway when no dedicated gateway."""
+        parser = IndygoParser()
+        a, b, c = parser._resolve_lr_pc(
+            [{"type": "lr-pc-vs2", "serialNumber": "123456"}]
+        )
         assert a == "123456"
 
     def test_resolve_ipx_direct(self):
@@ -202,6 +234,90 @@ class TestIndygoParser:
         assert len(mod.programs) == expected_count
         assert mod.filtration_program is not None
         assert mod.filtration_program["programCharacteristics"]["mode"] == MODE_AUTO
+
+    def test_parse_modules_with_input_sensors(self):
+        """Test Redox and pressure sensors are parsed from module inputs."""
+        parser = IndygoParser()
+        json_data = {
+            "modules": [
+                {
+                    "id": "MOD_123",
+                    "type": "lr-pc-vs2",
+                    "name": "Pump",
+                    "inputs": [
+                        {
+                            "type": 7,
+                            "lastValue": {
+                                "value": TEST_REDOX_VALUE,
+                                "date": TEST_DATE,
+                            },
+                        },
+                        {
+                            "type": 8,
+                            "lastComputedMeasure": {
+                                "value": TEST_PRESSURE_VALUE,
+                                "date": TEST_DATE,
+                            },
+                        },
+                    ],
+                }
+            ],
+        }
+        pool_data = parser.parse_data(json_data, "P1", "A1", "R1")
+        mod = pool_data.modules["MOD_123"]
+
+        assert mod.sensors["redox"].value == TEST_REDOX_VALUE
+        assert (
+            mod.sensors["redox"].extra_attributes["last_measurement_time"] == TEST_DATE
+        )
+        assert mod.sensors["filter_pressure"].value == TEST_PRESSURE_VALUE
+        assert (
+            mod.sensors["filter_pressure"].extra_attributes["last_measurement_time"]
+            == TEST_DATE
+        )
+
+    def test_parse_modules_with_alt_pressure_input_sensor(self):
+        """Test alternate pressure input type is parsed."""
+        parser = IndygoParser()
+        json_data = {
+            "modules": [
+                {
+                    "id": "MOD_123",
+                    "type": "lr-pc",
+                    "name": "Pump",
+                    "inputs": [
+                        {
+                            "type": 56,
+                            "lastValue": {
+                                "value": TEST_PRESSURE_ALT_VALUE,
+                                "date": TEST_DATE,
+                            },
+                        }
+                    ],
+                }
+            ],
+        }
+        pool_data = parser.parse_data(json_data, "P1", "A1", "R1")
+        mod = pool_data.modules["MOD_123"]
+        assert mod.sensors["filter_pressure"].value == TEST_PRESSURE_ALT_VALUE
+
+    def test_parse_input_sensors_ignores_non_list_inputs(self):
+        """Test non-list inputs are ignored."""
+        target = {}
+        IndygoParser._parse_input_sensors(None, target)
+        assert target == {}
+
+    def test_parse_input_sensors_skips_invalid_measurements(self):
+        """Test inputs with invalid or missing measurements are skipped."""
+        target = {}
+        IndygoParser._parse_input_sensors(
+            [
+                {"type": 7, "lastValue": "not-a-dict"},
+                {"type": 8, "lastComputedMeasure": {"value": None}},
+            ],
+            target,
+        )
+        assert target == {}
 
     def test_parse_filtration_schedule_as_attributes(self):
         """Test schedule is exposed as attributes on the filtration status."""

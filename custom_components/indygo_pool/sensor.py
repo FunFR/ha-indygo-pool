@@ -12,7 +12,13 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EntityCategory, UnitOfTemperature, UnitOfTime
+from homeassistant.const import (
+    EntityCategory,
+    UnitOfElectricPotential,
+    UnitOfPressure,
+    UnitOfTemperature,
+    UnitOfTime,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import slugify
@@ -74,6 +80,19 @@ SENSOR_TYPES: tuple[IndygoSensorEntityDescription, ...] = (
         translation_key="ph",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=1,
+    ),
+    IndygoSensorEntityDescription(
+        key="redox",
+        translation_key="redox",
+        native_unit_of_measurement=UnitOfElectricPotential.MILLIVOLT,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    IndygoSensorEntityDescription(
+        key="filter_pressure",
+        translation_key="filter_pressure",
+        native_unit_of_measurement=UnitOfPressure.BAR,
+        device_class=SensorDeviceClass.PRESSURE,
+        state_class=SensorStateClass.MEASUREMENT,
     ),
     IndygoSensorEntityDescription(
         key="filtration_remaining_time",

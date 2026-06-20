@@ -52,7 +52,7 @@ pythonpath = ["."]
 markers = [
     "integration: tests that require real API credentials",
 ]
-addopts = "--cov=custom_components.indygo_pool --cov-report=term-missing --cov-report=xml"
+addopts = "-m 'not integration' --cov=custom_components.indygo_pool --cov-report=term-missing --cov-report=xml"
 
 [tool.coverage.run]
 source = ["custom_components/indygo_pool"]

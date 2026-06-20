@@ -12,7 +12,17 @@ from .models import IndygoModuleData, IndygoPoolData, IndygoSensorData
 _LOGGER = logging.getLogger(__name__)
 
 
-IPX_PH_SENSOR_TYPE = 6
+INPUT_SENSOR_TYPE_PH = 6
+INPUT_SENSOR_TYPE_REDOX = 7
+INPUT_SENSOR_TYPE_PRESSURE = 8
+INPUT_SENSOR_TYPE_PRESSURE_ALT = 56
+
+INPUT_SENSOR_TYPES = {
+    INPUT_SENSOR_TYPE_PH: "ph",
+    INPUT_SENSOR_TYPE_REDOX: "redox",
+    INPUT_SENSOR_TYPE_PRESSURE: "filter_pressure",
+    INPUT_SENSOR_TYPE_PRESSURE_ALT: "filter_pressure",
+}
 
 
 def _get_nested(obj: dict | list | None, *keys: str) -> Any:
@@ -37,6 +47,13 @@ class IndygoParser:
     # Hardware ID resolution (from module list, no HTML needed)
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _is_lr_pc_module(module: dict | IndygoModuleData) -> bool:
+        """Return true for Pool Command modules, including VS variants."""
+        if isinstance(module, IndygoModuleData):
+            return module.type.startswith("lr-pc")
+        return module.get("type", "").startswith("lr-pc")
+
     def _extract_device_ids(self, lr_pc: dict) -> tuple[str | None, str | None]:
         """Extract device short ID and relay ID from lr-pc module."""
         name_parts = lr_pc.get("name", "").split("-")
@@ -53,7 +70,7 @@ class IndygoParser:
     ) -> tuple[str | None, str | None, str | None]:
         """Resolve IDs from lr-pc + gateway modules."""
         gateway = next((m for m in modules if m.get("type") == "lr-mb-10"), None)
-        lr_pc = next((m for m in modules if m.get("type") == "lr-pc"), None)
+        lr_pc = next((m for m in modules if self._is_lr_pc_module(m)), None)
 
         if not lr_pc:
             return None, None, None
@@ -110,7 +127,14 @@ class IndygoParser:
         """Find the module responsible for filtration."""
         return next(
             (m for m in pool_data.modules.values() if m.filtration_program),
-            next((m for m in pool_data.modules.values() if m.type == "lr-pc"), None),
+            next(
+                (
+                    m
+                    for m in pool_data.modules.values()
+                    if IndygoParser._is_lr_pc_module(m)
+                ),
+                None,
+            ),
         )
 
     def parse_data(
@@ -367,6 +391,8 @@ class IndygoParser:
                         )
                     )
 
+            self._parse_input_sensors(module.get("inputs", []), indygo_module.sensors)
+
             # Programs
             programs = module.get("programs", [])
             if programs:
@@ -381,6 +407,35 @@ class IndygoParser:
                         break
 
             pool_data.modules[str(m_id)] = indygo_module
+
+    @staticmethod
+    def _parse_input_sensors(
+        inputs: list[dict],
+        target_sensors: dict[str, IndygoSensorData],
+    ) -> None:
+        """Parse generic module input sensors."""
+        if not isinstance(inputs, list):
+            return
+
+        for inp in inputs:
+            sensor_key = INPUT_SENSOR_TYPES.get(inp.get("type"))
+            if not sensor_key:
+                continue
+
+            last_measure = inp.get("lastValue") or inp.get("lastComputedMeasure")
+            if not isinstance(last_measure, dict) or last_measure.get("value") is None:
+                continue
+
+            extra_attrs = {}
+            date_str = last_measure.get("date")
+            if date_str:
+                extra_attrs["last_measurement_time"] = date_str
+
+            target_sensors[sensor_key] = IndygoSensorData(
+                key=sensor_key,
+                value=last_measure["value"],
+                extra_attributes=extra_attrs,
+            )
 
     def _parse_scraped_ipx(self, json_data: dict, pool_data: IndygoPoolData) -> None:
         """Parse ipx_module data."""
@@ -419,23 +474,4 @@ class IndygoParser:
                 value=elec_mode,
             )
 
-        # pH Latest (from inputs)
-        inputs = ipx_mod.get("inputs", [])
-        if isinstance(inputs, list):
-            for inp in inputs:
-                last_val = inp.get("lastValue")
-                if last_val and "value" in last_val and last_val["value"] is not None:
-                    if inp.get("type") == IPX_PH_SENSOR_TYPE:
-                        val = last_val["value"]
-                        date_str = last_val.get("date")
-
-                        extra_attrs = {}
-                        if date_str:
-                            extra_attrs["last_measurement_time"] = date_str
-
-                        target_sensors["ph"] = IndygoSensorData(
-                            key="ph",
-                            value=val,
-                            extra_attributes=extra_attrs,
-                        )
-                        break
+        self._parse_input_sensors(ipx_mod.get("inputs", []), target_sensors)
