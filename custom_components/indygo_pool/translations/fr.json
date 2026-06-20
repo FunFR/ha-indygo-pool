@@ -45,6 +45,12 @@
             "ph": {
                 "name": "pH"
             },
+            "redox": {
+                "name": "Redox"
+            },
+            "filter_pressure": {
+                "name": "Pression du filtre"
+            },
             "filtration_remaining_time": {
                 "name": "Temps restant filtration"
             }

@@ -19,6 +19,8 @@ from custom_components.indygo_pool.sensor import (
 TEMP_VALUE = 25.5
 POWER_VALUE = 150.0
 DUR_VALUE = 10
+REDOX_VALUE = 720
+PRESSURE_VALUE = 1.2
 MIN_ENTITIES = 2
 
 
@@ -145,6 +147,39 @@ async def test_async_setup_entry(mock_coordinator):
     keys_added = [e.entity_description.key for e in entities]
     assert "temperature" in keys_added
     assert "totalElectrolyseDuration" in keys_added
+
+
+@pytest.mark.asyncio
+async def test_async_setup_entry_redox_and_pressure(mock_coordinator):
+    """Test setup entry creates Redox and filter pressure entities."""
+    mock_entry = MagicMock()
+    mock_hass = MagicMock()
+    mock_hass.data = {"indygo_pool": {mock_entry.entry_id: mock_coordinator}}
+
+    mock_coordinator.data.modules = {
+        "mod1": IndygoModuleData(
+            id="mod1",
+            type="lr-pc-vs2",
+            name="Pump",
+            sensors={
+                "redox": IndygoSensorData(key="redox", value=REDOX_VALUE),
+                "filter_pressure": IndygoSensorData(
+                    key="filter_pressure",
+                    value=PRESSURE_VALUE,
+                ),
+            },
+        )
+    }
+
+    async_add_entities = MagicMock()
+
+    await async_setup_entry(mock_hass, mock_entry, async_add_entities)
+
+    async_add_entities.assert_called_once()
+    entities = async_add_entities.call_args[0][0]
+    keys_added = [e.entity_description.key for e in entities]
+    assert "redox" in keys_added
+    assert "filter_pressure" in keys_added
 
 
 @pytest.mark.asyncio
