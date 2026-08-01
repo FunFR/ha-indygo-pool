@@ -17,7 +17,7 @@ from typing import Any
 
 import aiohttp
 
-from .const import LOGGER, PROGRAM_TYPE_FILTRATION
+from .const import LOGGER
 from .models import IndygoPoolData
 from .parser import IndygoParser
 
@@ -347,16 +347,38 @@ class IndygoPoolApiClient:
         return self._data
 
     # ------------------------------------------------------------------
-    # Filtration mode control
+    # Program mode control
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _is_target_program(program: dict, target: dict) -> bool:
+        """Return True when ``program`` is the one being updated.
+
+        Matches on the program ``id`` when available, and falls back to the
+        program ``index`` — some payloads carry no identifier.
+        """
+        target_id = target.get("id")
+        if target_id is not None:
+            return program.get("id") == target_id
+
+        target_index = target.get("index")
+        return target_index is not None and program.get("index") == target_index
 
     async def async_set_filtration_mode(
         self, module_id: str, full_program_data: dict, mode: int
     ) -> None:
-        """Set the filtration mode (Auto/Off/On) safely.
+        """Set the filtration mode (Auto/Off/On) safely."""
+        await self.async_set_program_mode(module_id, full_program_data, mode)
 
-        Sends the FULL program list back (like the Android app) to avoid
-        corrupting the device configuration.
+    async def async_set_program_mode(
+        self, module_id: str, full_program_data: dict, mode: int
+    ) -> None:
+        """Set the mode (Off/On/Auto) of a single module program.
+
+        Sends the FULL program list back (like the vendor apps) to avoid
+        corrupting the device configuration.  Only the targeted program has
+        its mode changed: every other program is sent back carrying its own
+        current mode, which is what the vendor apps do.
         """
         program_copy = copy.deepcopy(full_program_data)
 
@@ -372,34 +394,25 @@ class IndygoPoolApiClient:
         if self._data and module_id in self._data.modules:
             module_programs = self._data.modules[module_id].programs
 
-        # Build the full programs list with updated filtration program
+        # Build the full programs list with the updated target program
         updated_programs = []
-        program_id = program_copy.get("id")
         program_found = False
         for prog in module_programs:
-            if prog.get("id") == program_id:
+            if self._is_target_program(prog, program_copy):
                 updated_programs.append(program_copy)
                 program_found = True
             else:
                 prog_copy = copy.deepcopy(prog)
                 prog_copy["dataChanged"] = True
-                prog_type = prog_copy.get("programCharacteristics", {}).get(
-                    "programType"
-                )
-                if prog_type != PROGRAM_TYPE_FILTRATION:
-                    if (
-                        "programCharacteristics" in prog_copy
-                        and "mode" in prog_copy["programCharacteristics"]
-                    ):
-                        prog_copy["programCharacteristics"]["mode"] = None
                 updated_programs.append(prog_copy)
 
         if not program_found:
             updated_programs.append(program_copy)
 
         LOGGER.debug(
-            "Setting filtration mode to %s for module %s. Sending %d programs.",
+            "Setting mode %s on program %s of module %s. Sending %d programs.",
             mode,
+            program_copy.get("id") or program_copy.get("index"),
             module_id,
             len(updated_programs),
         )
@@ -436,7 +449,7 @@ class IndygoPoolApiClient:
                 )
 
         except IndygoPoolApiClientError as exc:
-            LOGGER.error("Failed to set filtration mode: %s", exc)
+            LOGGER.error("Failed to set program mode: %s", exc)
             raise
 
     # ------------------------------------------------------------------

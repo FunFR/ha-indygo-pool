@@ -94,6 +94,14 @@
             "filtration_mode": {
                 "name": "Mode filtration"
             }
+        },
+        "switch": {
+            "spotlight": {
+                "name": "Projecteur"
+            },
+            "auxiliary_circuit": {
+                "name": "{circuit}"
+            }
         }
     }
 }

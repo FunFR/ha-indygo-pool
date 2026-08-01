@@ -787,3 +787,90 @@ class TestGetNested:
     def test_returns_none_on_invalid_index(self):
         """Test with non-numeric key on a list."""
         assert _get_nested([1, 2], "abc") is None
+
+
+class TestPoolCircuits:
+    """Test parsing of the 'pool' list beyond the filtration circuit."""
+
+    @staticmethod
+    def _json(pool: list[dict]) -> dict:
+        return {
+            "modules": [
+                {
+                    "id": "MOD1",
+                    "type": "lr-pc",
+                    "name": "LRPC-D37902",
+                    "programs": [
+                        {
+                            "index": 0,
+                            "programCharacteristics": {
+                                "programType": FILTRATION_PROGRAM_TYPE,
+                                "mode": MODE_ON,
+                            },
+                        }
+                    ],
+                }
+            ],
+            "pool": pool,
+        }
+
+    def test_parses_every_circuit(self):
+        """Auxiliary circuits are exposed alongside the filtration one."""
+        parser = IndygoParser()
+        pool_data = parser.parse_data(
+            self._json(
+                [
+                    {"index": 0, "value": 1},
+                    {"index": 1, "value": 1, "info": []},
+                    {"index": 2, "value": 0},
+                ]
+            ),
+            "P1",
+            "A1",
+            "R1",
+        )
+
+        status = pool_data.modules["MOD1"].pool_status
+        assert set(status) == {"0", "1", "2"}
+        assert status["0"].key == "filtration_status"
+        assert status["1"].key == "circuit_1_status"
+        assert status["1"].value == 1
+        assert status["2"].value == 0
+
+    def test_auxiliary_circuits_carry_their_attributes(self):
+        """Auxiliary circuits keep the raw payload fields as attributes."""
+        parser = IndygoParser()
+        pool_data = parser.parse_data(
+            self._json([{"index": 1, "value": 1, "info": [], "time": "00:00"}]),
+            "P1",
+            "A1",
+            "R1",
+        )
+
+        attrs = pool_data.modules["MOD1"].pool_status["1"].extra_attributes
+        assert attrs["info"] == []
+        assert attrs["time"] == "00:00"
+
+    def test_remaining_time_stays_filtration_only(self):
+        """The remaining-time sensor is not created for auxiliary circuits."""
+        parser = IndygoParser()
+        pool_data = parser.parse_data(
+            self._json([{"index": 1, "value": 1, "time": "01:30"}]),
+            "P1",
+            "A1",
+            "R1",
+        )
+
+        assert "filtration_remaining_time" not in pool_data.modules["MOD1"].sensors
+
+    def test_skips_entries_without_index(self):
+        """A malformed entry is ignored rather than stored under 'None'."""
+        parser = IndygoParser()
+        pool_data = parser.parse_data(
+            self._json([{"value": 1}, {"index": 1, "value": 1}]),
+            "P1",
+            "A1",
+            "R1",
+        )
+
+        assert set(pool_data.modules["MOD1"].pool_status) == {"1"}

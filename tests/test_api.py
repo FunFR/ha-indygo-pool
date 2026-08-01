@@ -515,10 +515,18 @@ OTHER_PROGRAM = {
     "programCharacteristics": {"mode": 1, "programType": 1},
 }
 
+PROGRAM_MODE_AUTO = 2
+EXPECTED_PROGRAM_COUNT = 2
+
 
 @pytest.mark.asyncio
-async def test_set_filtration_mode_clears_mode_on_non_filtration():
-    """Test that non-filtration programs have their mode cleared."""
+async def test_set_filtration_mode_preserves_other_program_modes():
+    """Non-target programs keep their own mode.
+
+    The vendor apps send the whole program list back with every program
+    carrying its real mode; clearing the siblings would push a null mode
+    onto the spotlight and auxiliary circuits of the board.
+    """
     if aioresponses is None:
         pytest.skip("aioresponses not installed")
 
@@ -542,12 +550,89 @@ async def test_set_filtration_mode_clears_mode_on_non_filtration():
                 TEST_MODULE_ID, FILT_PROGRAM_WITH_ID, 2
             )
 
-            # Verify other program had mode cleared
             req = m.requests[("PUT", URL(f"{BASE_URL}/api/updatePrograms"))][0]
             payload = req.kwargs.get("json", {})
+
+            target = payload["programs"][0]
+            assert target["programCharacteristics"]["mode"] == PROGRAM_MODE_AUTO
+
             other = payload["programs"][1]
-            assert other["programCharacteristics"]["mode"] is None
+            assert other["programCharacteristics"]["mode"] == 1
             assert other["dataChanged"] is True
+
+            # The caller's dict must not be mutated in place.
+            assert OTHER_PROGRAM["programCharacteristics"]["mode"] == 1
+
+
+@pytest.mark.asyncio
+async def test_set_program_mode_targets_only_requested_program():
+    """Setting an auxiliary program leaves filtration untouched."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    with aioresponses() as m:
+        _mock_filtration_endpoints(m)
+
+        async with aiohttp.ClientSession() as session:
+            client = _make_client(session)
+            client._pool_address = TEST_POOL_ADDRESS
+            client._device_short_id = "ABC"
+            client._data = IndygoPoolData(pool_id=TEST_POOL_ID)
+            client._data.modules[TEST_MODULE_ID] = IndygoModuleData(
+                id=TEST_MODULE_ID,
+                type="lr-pc",
+                name="Pump",
+                programs=[FILT_PROGRAM_WITH_ID, OTHER_PROGRAM],
+                raw_data={"serialNumber": TEST_SERIAL},
+            )
+
+            await client.async_set_program_mode(TEST_MODULE_ID, OTHER_PROGRAM, 0)
+
+            req = m.requests[("PUT", URL(f"{BASE_URL}/api/updatePrograms"))][0]
+            payload = req.kwargs.get("json", {})
+
+            assert payload["programs"][0]["programCharacteristics"]["mode"] == 0
+            assert payload["programs"][1]["programCharacteristics"]["mode"] == 0
+            assert payload["programs"][0]["id"] == "prog_1"
+            assert payload["programs"][1]["id"] == "prog_2"
+
+
+@pytest.mark.asyncio
+async def test_set_program_mode_matches_on_index_without_id():
+    """Programs without an id are matched on their index."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    filtration = {"index": 0, "programCharacteristics": {"mode": 2, "programType": 4}}
+    spotlight = {"index": 1, "programCharacteristics": {"mode": 0, "programType": 2}}
+
+    with aioresponses() as m:
+        _mock_filtration_endpoints(m)
+
+        async with aiohttp.ClientSession() as session:
+            client = _make_client(session)
+            client._pool_address = TEST_POOL_ADDRESS
+            client._device_short_id = "ABC"
+            client._data = IndygoPoolData(pool_id=TEST_POOL_ID)
+            client._data.modules[TEST_MODULE_ID] = IndygoModuleData(
+                id=TEST_MODULE_ID,
+                type="lr-pc",
+                name="Pump",
+                programs=[filtration, spotlight],
+                raw_data={"serialNumber": TEST_SERIAL},
+            )
+
+            await client.async_set_program_mode(TEST_MODULE_ID, spotlight, 1)
+
+            req = m.requests[("PUT", URL(f"{BASE_URL}/api/updatePrograms"))][0]
+            payload = req.kwargs.get("json", {})
+
+            assert len(payload["programs"]) == EXPECTED_PROGRAM_COUNT
+            assert (
+                payload["programs"][0]["programCharacteristics"]["mode"]
+                == PROGRAM_MODE_AUTO
+            )
+            assert payload["programs"][1]["programCharacteristics"]["mode"] == 1
 
 
 @pytest.mark.asyncio
