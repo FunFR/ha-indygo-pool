@@ -17,6 +17,7 @@ from yarl import URL
 
 from custom_components.indygo_pool.api import (
     BASE_URL,
+    USER_AGENT,
     IndygoPoolApiClient,
     IndygoPoolApiClientAuthenticationError,
     IndygoPoolApiClientCommunicationError,
@@ -153,6 +154,50 @@ async def test_login_success():
             )
             await client.async_login()
             assert client._token == "Bearer fake_access_token"
+
+
+@pytest.mark.asyncio
+async def test_login_sends_user_agent():
+    """The token request identifies this client rather than aiohttp."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    with aioresponses() as m:
+        m.post(f"{BASE_URL}/oauth2/token", payload=TOKEN_RESPONSE)
+
+        async with aiohttp.ClientSession() as session:
+            client = IndygoPoolApiClient(
+                "test@example.com", "pass", TEST_POOL_ID, session
+            )
+            await client.async_login()
+
+        req = m.requests[("POST", URL(f"{BASE_URL}/oauth2/token"))][0]
+        assert req.kwargs["headers"]["User-Agent"] == USER_AGENT
+
+
+@pytest.mark.asyncio
+async def test_authenticated_request_sends_user_agent():
+    """Every authenticated call carries the same identification."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    with aioresponses() as m:
+        m.post(f"{BASE_URL}/api/getPoolStatus", payload={})
+
+        async with aiohttp.ClientSession() as session:
+            client = _make_client(session)
+            await client._fetch_pool_status()
+
+        req = m.requests[("POST", URL(f"{BASE_URL}/api/getPoolStatus"))][0]
+        assert req.kwargs["headers"]["User-Agent"] == USER_AGENT
+
+
+def test_user_agent_names_the_project_and_its_version():
+    """The header stays honest: our name, our version, our repository."""
+    assert USER_AGENT.startswith("ha-indygo-pool/")
+    assert "github.com/FunFR/ha-indygo-pool" in USER_AGENT
+    assert "aiohttp" not in USER_AGENT
+    assert "okhttp" not in USER_AGENT
 
 
 @pytest.mark.asyncio
