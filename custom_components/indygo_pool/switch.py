@@ -13,7 +13,7 @@ from typing import Any
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import CALLBACK_TYPE, HomeAssistant
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_call_later
 
@@ -202,8 +202,13 @@ class IndygoPoolCircuitSwitch(IndygoPoolEntity, SwitchEntity):
         if state is not None:
             return state
         # Hardware that does not answer the live status endpoint leaves us
-        # with the programmed mode only.
-        return self._mode == PROGRAM_MODE_ON
+        # with the programmed mode only.  When that is missing too — the
+        # module dropped out of the payload — the honest answer is "unknown",
+        # not "off".
+        mode = self._mode
+        if mode is None:
+            return None
+        return mode == PROGRAM_MODE_ON
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -243,6 +248,7 @@ class IndygoPoolCircuitSwitch(IndygoPoolEntity, SwitchEntity):
         await self.coordinator.async_request_refresh()
         self._schedule_delayed_refresh()
 
+    @callback
     def _schedule_delayed_refresh(self) -> None:
         """Schedule a coordinator refresh after a delay."""
         if self._cancel_delayed_refresh:
@@ -251,10 +257,26 @@ class IndygoPoolCircuitSwitch(IndygoPoolEntity, SwitchEntity):
         self._cancel_delayed_refresh = async_call_later(
             self.hass,
             DELAYED_REFRESH_SECONDS,
-            self._async_delayed_refresh,
+            self._delayed_refresh_callback,
         )
 
-    async def _async_delayed_refresh(self, _now: object) -> None:
-        """Perform the delayed coordinator refresh."""
+    @callback
+    def _delayed_refresh_callback(self, _now: object) -> None:
+        """Fire the delayed coordinator refresh.
+
+        Invoked by ``async_call_later`` in the event loop, so it stays
+        synchronous and hands the awaitable work to a task.
+        """
         self._cancel_delayed_refresh = None
-        await self.coordinator.async_request_refresh()
+        self.hass.async_create_task(self.coordinator.async_request_refresh())
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Cancel a pending delayed refresh when the entity goes away.
+
+        Without this, unloading or reloading the integration during the
+        30 s window leaves the timer armed and it fires on a dead entity.
+        """
+        if self._cancel_delayed_refresh:
+            self._cancel_delayed_refresh()
+            self._cancel_delayed_refresh = None
+        await super().async_will_remove_from_hass()

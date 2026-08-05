@@ -243,11 +243,15 @@ class TestState:
         assert attributes["circuit_index"] == 1
 
     def test_unknown_module(self, mock_coordinator):
-        """A module that disappeared yields no state and no crash."""
+        """A module that disappeared yields unknown, not off.
+
+        Reporting False here would state that the circuit is powered down,
+        which we have no way of knowing once the module left the payload.
+        """
         mock_coordinator.data.modules = {}
         entity = _switch(mock_coordinator)
 
-        assert entity.is_on is False
+        assert entity.is_on is None
         assert entity.extra_state_attributes["program_mode"] is None
 
 
@@ -312,20 +316,57 @@ class TestCommands:
 
     @pytest.mark.asyncio
     async def test_delayed_refresh_callback(self, mock_coordinator):
-        """The delayed callback refreshes and clears its handle."""
+        """The timer target must work the way HA invokes it: a plain call.
+
+        The previous version of this test awaited the target, which only
+        proved that a coroutine can be awaited — not that the scheduler's
+        synchronous call works.  Here it is called exactly as
+        ``async_call_later`` calls it.
+        """
         mock_coordinator.data.modules = {"mod1": _module()}
         entity = _switch(mock_coordinator)
+        entity.hass = MagicMock()
 
         with patch(
             "custom_components.indygo_pool.switch.async_call_later"
         ) as mock_call_later:
             await entity.async_turn_on()
 
-        callback = mock_call_later.call_args[0][2]
-        mock_coordinator.async_request_refresh.reset_mock()
-        await callback(None)
+        timer_target = mock_call_later.call_args[0][2]
+        assert timer_target(None) is None
 
-        mock_coordinator.async_request_refresh.assert_awaited_once()
+        assert entity._cancel_delayed_refresh is None
+        entity.hass.async_create_task.assert_called_once()
+        # Close the coroutine handed to the task so it is not left un-awaited.
+        entity.hass.async_create_task.call_args[0][0].close()
+
+    @pytest.mark.asyncio
+    async def test_removal_cancels_pending_refresh(self, mock_coordinator):
+        """Unloading during the delay window disarms the timer."""
+        mock_coordinator.data.modules = {"mod1": _module()}
+        entity = _switch(mock_coordinator)
+        entity.hass = MagicMock()
+
+        cancel_cb = MagicMock()
+        with patch(
+            "custom_components.indygo_pool.switch.async_call_later",
+            return_value=cancel_cb,
+        ):
+            await entity.async_turn_on()
+
+        await entity.async_will_remove_from_hass()
+
+        cancel_cb.assert_called_once()
+        assert entity._cancel_delayed_refresh is None
+
+    @pytest.mark.asyncio
+    async def test_removal_without_pending_refresh_is_a_no_op(self, mock_coordinator):
+        """Removing an idle entity must not raise."""
+        mock_coordinator.data.modules = {"mod1": _module()}
+        entity = _switch(mock_coordinator)
+
+        await entity.async_will_remove_from_hass()
+
         assert entity._cancel_delayed_refresh is None
 
 
