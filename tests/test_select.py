@@ -163,7 +163,13 @@ class TestIndygoPoolSelect:
 
     @pytest.mark.asyncio
     async def test_delayed_refresh_callback(self, mock_coordinator):
-        """Test the delayed refresh callback triggers a coordinator refresh."""
+        """The timer target must work the way HA invokes it: a plain call.
+
+        ``async_call_later`` expects a synchronous ``@callback``, not a
+        coroutine function. Awaiting the target directly only proves a
+        coroutine can be awaited, not that the scheduler's synchronous call
+        works.
+        """
         module_id = "mod1"
         mock_coordinator.data.modules = {
             module_id: IndygoModuleData(
@@ -175,18 +181,56 @@ class TestIndygoPoolSelect:
         }
 
         entity = IndygoPoolSelect(mock_coordinator, module_id, "Pump")
+        entity.hass = MagicMock()
 
         with patch(
             "custom_components.indygo_pool.select.async_call_later"
         ) as mock_call_later:
             await entity.async_select_option(MODE_ON)
 
-        # Extract and call the delayed refresh callback
-        callback = mock_call_later.call_args[0][2]
-        mock_coordinator.async_request_refresh.reset_mock()
-        await callback(None)
+        timer_target = mock_call_later.call_args[0][2]
+        assert timer_target(None) is None
 
-        mock_coordinator.async_request_refresh.assert_called_once()
+        assert entity._cancel_delayed_refresh is None
+        entity.hass.async_create_task.assert_called_once()
+        # Close the coroutine handed to the task so it is not left un-awaited.
+        entity.hass.async_create_task.call_args[0][0].close()
+
+    @pytest.mark.asyncio
+    async def test_removal_cancels_pending_refresh(self, mock_coordinator):
+        """Unloading during the delay window disarms the timer."""
+        module_id = "mod1"
+        mock_coordinator.data.modules = {
+            module_id: IndygoModuleData(
+                id=module_id,
+                type="lr-pc",
+                name="Pump",
+                filtration_program={"programCharacteristics": {"mode": 0}},
+            )
+        }
+
+        entity = IndygoPoolSelect(mock_coordinator, module_id, "Pump")
+        entity.hass = MagicMock()
+
+        cancel_cb = MagicMock()
+        with patch(
+            "custom_components.indygo_pool.select.async_call_later",
+            return_value=cancel_cb,
+        ):
+            await entity.async_select_option(MODE_ON)
+
+        await entity.async_will_remove_from_hass()
+
+        cancel_cb.assert_called_once()
+        assert entity._cancel_delayed_refresh is None
+
+    @pytest.mark.asyncio
+    async def test_removal_without_pending_refresh_is_a_no_op(self, mock_coordinator):
+        """Removing an idle entity must not raise."""
+        entity = IndygoPoolSelect(mock_coordinator, "mod1", "Pump")
+
+        await entity.async_will_remove_from_hass()
+
         assert entity._cancel_delayed_refresh is None
 
     @pytest.mark.asyncio
