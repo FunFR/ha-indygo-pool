@@ -9,6 +9,7 @@ published by the board.
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from homeassistant.components.switch import SwitchEntity
@@ -33,7 +34,18 @@ from .models import IndygoModuleData
 # Delay (seconds) before a follow-up refresh after a mode change.  The command
 # travels cloud → gateway → LoRa → device and the device then reports back, so
 # the status endpoint keeps returning the old state for a short while.
-DELAYED_REFRESH_SECONDS = 30
+# Follow-up reads after a write.  Round trips of 12 s, 16 s and 86 s have been
+# measured on real hardware, so a single shot cannot cover the range: too early
+# and it reads the old state, too late and the entity stays stale until the
+# next poll.  Three staged reads span the measured spread at the cost of two
+# extra requests per command.
+DELAYED_REFRESH_SCHEDULE = (15, 45, 90)
+
+# How long the entity keeps reporting the requested state while waiting for the
+# board to confirm it.  Deliberately past the last follow-up read, and bounded:
+# beyond it, a command that never took effect must stop being reported as if it
+# had.
+OPTIMISTIC_TIMEOUT_SECONDS = 150
 
 # Human-readable mode, exposed as an attribute so automations can tell an
 # explicit On/Off from a scheduled Auto.
@@ -144,7 +156,11 @@ class IndygoPoolCircuitSwitch(IndygoPoolEntity, SwitchEntity):
             self._attr_translation_placeholders = translation_placeholders
         self._attr_unique_id = self._build_unique_id(f"circuit_{circuit_index}")
         self.entity_id = f"switch.{self.device_name_slug}_{entity_suffix}"
-        self._cancel_delayed_refresh: CALLBACK_TYPE | None = None
+        self._pending_refreshes: list[CALLBACK_TYPE] = []
+        # Requested state, held until the board confirms it or the window
+        # expires.  See `is_on`.
+        self._optimistic: bool | None = None
+        self._optimistic_expires: float = 0.0
 
     # ------------------------------------------------------------------
     # Data helpers
@@ -196,9 +212,37 @@ class IndygoPoolCircuitSwitch(IndygoPoolEntity, SwitchEntity):
     # Entity
     # ------------------------------------------------------------------
 
+    def _optimistic_value(self) -> bool | None:
+        """Return the pending requested state, or None if it no longer holds.
+
+        Clears itself once the board reports the requested value, or once the
+        window elapses — so a command that never took effect surfaces as the
+        real state instead of lying indefinitely.
+        """
+        if self._optimistic is None:
+            return None
+        if time.monotonic() >= self._optimistic_expires:
+            self._optimistic = None
+            return None
+        if self._circuit_state is self._optimistic:
+            self._optimistic = None
+            return None
+        return self._optimistic
+
     @property
     def is_on(self) -> bool | None:
         """Return true if the circuit is powered."""
+        # A command takes cloud → gateway → LoRa → board and back: measured
+        # between 12 s and 86 s.  Reporting the stale state during that window
+        # makes any controller that expects prompt confirmation — HomeKit in
+        # particular — treat the command as failed and retry it in a burst,
+        # while the user taps again.  Every one of those is a real write, so
+        # the board later replays the whole sequence and the light appears to
+        # switch itself off.  Hold the requested state until the board agrees.
+        optimistic = self._optimistic_value()
+        if optimistic is not None:
+            return optimistic
+
         state = self._circuit_state
         if state is not None:
             return state
@@ -215,12 +259,16 @@ class IndygoPoolCircuitSwitch(IndygoPoolEntity, SwitchEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return the state attributes."""
         mode = self._mode
+        if self._optimistic_value() is not None:
+            source = "optimistic"
+        elif self._circuit_state is not None:
+            source = "circuit"
+        else:
+            source = "program_mode"
         return {
             "circuit_index": self._circuit_index,
             "program_mode": PROGRAM_MODE_NAMES.get(mode, mode),
-            "state_source": (
-                "circuit" if self._circuit_state is not None else "program_mode"
-            ),
+            "state_source": source,
         }
 
     async def async_turn_on(self, **kwargs: Any) -> None:
@@ -246,38 +294,50 @@ class IndygoPoolCircuitSwitch(IndygoPoolEntity, SwitchEntity):
             self._module_id, program, mode
         )
 
+        # Report the requested state at once. Only after the write succeeded:
+        # a failed command must not leave the entity claiming a state the
+        # board never reached.
+        self._optimistic = mode == PROGRAM_MODE_ON
+        self._optimistic_expires = time.monotonic() + OPTIMISTIC_TIMEOUT_SECONDS
+        self.async_write_ha_state()
+
         await self.coordinator.async_request_refresh()
         self._schedule_delayed_refresh()
 
     @callback
     def _schedule_delayed_refresh(self) -> None:
-        """Schedule a coordinator refresh after a delay."""
-        if self._cancel_delayed_refresh:
-            self._cancel_delayed_refresh()
+        """Arm the follow-up reads that catch the board's confirmation."""
+        self._cancel_pending_refreshes()
+        for delay in DELAYED_REFRESH_SCHEDULE:
+            self._pending_refreshes.append(
+                async_call_later(self.hass, delay, self._delayed_refresh_callback)
+            )
 
-        self._cancel_delayed_refresh = async_call_later(
-            self.hass,
-            DELAYED_REFRESH_SECONDS,
-            self._delayed_refresh_callback,
-        )
+    @callback
+    def _cancel_pending_refreshes(self) -> None:
+        """Drop every armed follow-up read.
+
+        Cancelling a timer that already fired is a no-op, so handles are not
+        tracked individually.
+        """
+        for cancel in self._pending_refreshes:
+            cancel()
+        self._pending_refreshes.clear()
 
     @callback
     def _delayed_refresh_callback(self, _now: object) -> None:
-        """Fire the delayed coordinator refresh.
+        """Fire one follow-up read.
 
         Invoked by ``async_call_later`` in the event loop, so it stays
         synchronous and hands the awaitable work to a task.
         """
-        self._cancel_delayed_refresh = None
         self.hass.async_create_task(self.coordinator.async_request_refresh())
 
     async def async_will_remove_from_hass(self) -> None:
-        """Cancel a pending delayed refresh when the entity goes away.
+        """Cancel pending reads when the entity goes away.
 
-        Without this, unloading or reloading the integration during the
-        30 s window leaves the timer armed and it fires on a dead entity.
+        Without this, unloading or reloading the integration inside the
+        follow-up window leaves timers armed, firing on a dead entity.
         """
-        if self._cancel_delayed_refresh:
-            self._cancel_delayed_refresh()
-            self._cancel_delayed_refresh = None
+        self._cancel_pending_refreshes()
         await super().async_will_remove_from_hass()
