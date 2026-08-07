@@ -94,6 +94,14 @@
             "filtration_mode": {
                 "name": "Filtration mode"
             }
+        },
+        "switch": {
+            "spotlight": {
+                "name": "Spotlight"
+            },
+            "auxiliary_circuit": {
+                "name": "{circuit}"
+            }
         }
     }
 }

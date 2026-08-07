@@ -259,7 +259,13 @@ class IndygoParser:
         pool_data: IndygoPoolData,
         filt_module: IndygoModuleData | None = None,
     ) -> None:
-        """Parse 'pool' list which contains status for Filtration, etc."""
+        """Parse the 'pool' list: live state of every board circuit.
+
+        Index 0 is the filtration circuit.  The following indexes are the
+        auxiliary outputs of the Pool Command (spotlight, water blade, ...)
+        and map one-to-one onto the module programs and outputs carrying the
+        same index.
+        """
         if "pool" not in json_data or not isinstance(json_data["pool"], list):
             return
         target_status = (
@@ -268,18 +274,21 @@ class IndygoParser:
 
         for item in json_data["pool"]:
             idx = item.get("index")
+            if idx is None:
+                continue
+
             val = item.get("value")
+            temp_ref = item.get("tempRef")
+            remaining_time = item.get("time")
+
+            extra_attributes = {
+                "info": item.get("info"),
+                "time": remaining_time,
+                "tempRef": temp_ref,
+            }
 
             if idx == 0:
-                temp_ref = item.get("tempRef")
-                remaining_time = item.get("time")
-
-                extra_attributes = {
-                    "info": item.get("info"),
-                    "time": remaining_time,
-                    "tempRef": temp_ref,
-                }
-
+                key = "filtration_status"
                 if filt_module:
                     dialog_ts = self._parse_dialog_timestamp(
                         json_data.get("dialogTimeStamp")
@@ -289,22 +298,22 @@ class IndygoParser:
                             filt_module, temp_ref, dialog_ts
                         )
                     )
+            else:
+                key = f"circuit_{idx}_status"
 
-                target_status["0"] = IndygoSensorData(
-                    key="filtration_status",
-                    value=val,
-                    extra_attributes=extra_attributes,
-                )
+            target_status[str(idx)] = IndygoSensorData(
+                key=key,
+                value=val,
+                extra_attributes=extra_attributes,
+            )
 
-                if remaining_time and filt_module:
-                    remaining_minutes = self._parse_remaining_time(remaining_time)
-                    if remaining_minutes is not None:
-                        filt_module.sensors["filtration_remaining_time"] = (
-                            IndygoSensorData(
-                                key="filtration_remaining_time",
-                                value=remaining_minutes,
-                            )
-                        )
+            if idx == 0 and remaining_time and filt_module:
+                remaining_minutes = self._parse_remaining_time(remaining_time)
+                if remaining_minutes is not None:
+                    filt_module.sensors["filtration_remaining_time"] = IndygoSensorData(
+                        key="filtration_remaining_time",
+                        value=remaining_minutes,
+                    )
 
     def _parse_root_sensors(
         self,
