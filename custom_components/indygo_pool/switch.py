@@ -128,6 +128,7 @@ class IndygoPoolCircuitSwitch(IndygoPoolEntity, SwitchEntity):
 
     def __init__(
         self,
+        *,
         coordinator: IndygoPoolDataUpdateCoordinator,
         module_id: str,
         circuit_index: int,
