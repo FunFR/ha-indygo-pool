@@ -143,6 +143,7 @@ class IndygoPoolApiClient:
         self,
         method: str,
         url: str,
+        *,
         headers: dict | None = None,
         data: str | None = None,
         json_body: dict | None = None,
