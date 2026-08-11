@@ -1091,6 +1091,7 @@ dev = [
     { name = "aiohttp" },
     { name = "aioresponses" },
     { name = "commitizen" },
+    { name = "packaging" },
     { name = "pytest-cov" },
     { name = "python-dotenv" },
 ]
@@ -1110,6 +1111,7 @@ dev = [
     { name = "aiohttp", specifier = ">=3.9,<3.14" },
     { name = "aioresponses", specifier = ">=0.7.8" },
     { name = "commitizen", specifier = ">=4.10.1" },
+    { name = "packaging", specifier = ">=24" },
     { name = "pytest-cov" },
     { name = "python-dotenv", specifier = ">=1.2.1" },
 ]
