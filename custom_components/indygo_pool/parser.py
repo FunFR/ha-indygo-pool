@@ -33,7 +33,7 @@ def _get_nested(obj: dict | list | None, *keys: str) -> Any:
         if isinstance(obj, list):
             try:
                 obj = obj[int(k)]
-            except (IndexError, ValueError):
+            except IndexError, ValueError:
                 return None
         else:
             obj = obj.get(k)
@@ -180,7 +180,7 @@ class IndygoParser:
         try:
             parts = time_str.split(":")
             return int(parts[0]) * 60 + int(parts[1])
-        except (ValueError, IndexError):
+        except ValueError, IndexError:
             return None
 
     @staticmethod
@@ -191,7 +191,7 @@ class IndygoParser:
         try:
             dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
             return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return None
 
     def _build_schedule_attributes(
