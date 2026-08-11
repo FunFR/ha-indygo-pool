@@ -205,7 +205,7 @@ class IndygoPoolCircuitSwitch(IndygoPoolEntity, SwitchEntity):
             return None
         try:
             return float(status.value) == 1.0
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return None
 
     # ------------------------------------------------------------------

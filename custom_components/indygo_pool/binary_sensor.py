@@ -211,7 +211,7 @@ class IndygoPoolBinarySensor(IndygoPoolEntity, BinarySensorEntity):
                 if val is not None:
                     try:
                         return float(val) == 1.0
-                    except (ValueError, TypeError):
+                    except ValueError, TypeError:
                         pass
             return None
 
@@ -232,7 +232,7 @@ class IndygoPoolBinarySensor(IndygoPoolEntity, BinarySensorEntity):
                 try:
                     is_true = float(val) == 1.0
                     return not is_true if desc.is_inverted else is_true
-                except (ValueError, TypeError):
+                except ValueError, TypeError:
                     pass
 
         return None
