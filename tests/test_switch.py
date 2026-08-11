@@ -13,6 +13,7 @@ from custom_components.indygo_pool.models import (
     IndygoSensorData,
 )
 from custom_components.indygo_pool.switch import (
+    DELAYED_REFRESH_SCHEDULE,
     IndygoPoolCircuitSwitch,
     async_setup_entry,
 )
@@ -69,14 +70,21 @@ def _module(pool_status: dict | None = None) -> IndygoModuleData:
 
 
 def _switch(coordinator, index: int = 1) -> IndygoPoolCircuitSwitch:
-    """Build a switch for a given circuit index."""
-    return IndygoPoolCircuitSwitch(
+    """Build a switch for a given circuit index.
+
+    Standalone entity, with no state machine behind it: writing state is
+    stubbed.  The optimistic behaviour itself is asserted through ``is_on``.
+    """
+    entity = IndygoPoolCircuitSwitch(
         coordinator=coordinator,
         module_id="mod1",
         circuit_index=index,
         translation_key="spotlight",
         entity_suffix="spotlight",
     )
+    entity.hass = MagicMock()
+    entity.async_write_ha_state = MagicMock()
+    return entity
 
 
 class TestSetup:
@@ -297,11 +305,25 @@ class TestCommands:
         mock_coordinator.client.async_set_program_mode.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_delayed_refresh_is_rescheduled(self, mock_coordinator):
-        """A second command cancels the pending delayed refresh."""
+    async def test_one_read_is_armed_per_stage(self, mock_coordinator):
+        """A single shot cannot span 12 s to 86 s round trips — three do."""
         mock_coordinator.data.modules = {"mod1": _module()}
         entity = _switch(mock_coordinator)
-        entity.hass = MagicMock()
+
+        with patch(
+            "custom_components.indygo_pool.switch.async_call_later"
+        ) as mock_call_later:
+            await entity.async_turn_on()
+
+        delays = [call[0][1] for call in mock_call_later.call_args_list]
+        assert delays == list(DELAYED_REFRESH_SCHEDULE)
+        assert len(entity._pending_refreshes) == len(DELAYED_REFRESH_SCHEDULE)
+
+    @pytest.mark.asyncio
+    async def test_delayed_refresh_is_rescheduled(self, mock_coordinator):
+        """A second command disarms every read the first one armed."""
+        mock_coordinator.data.modules = {"mod1": _module()}
+        entity = _switch(mock_coordinator)
 
         cancel_cb = MagicMock()
         with patch(
@@ -312,7 +334,7 @@ class TestCommands:
             cancel_cb.assert_not_called()
 
             await entity.async_turn_off()
-            cancel_cb.assert_called_once()
+            assert cancel_cb.call_count == len(DELAYED_REFRESH_SCHEDULE)
 
     @pytest.mark.asyncio
     async def test_delayed_refresh_callback(self, mock_coordinator):
@@ -325,7 +347,6 @@ class TestCommands:
         """
         mock_coordinator.data.modules = {"mod1": _module()}
         entity = _switch(mock_coordinator)
-        entity.hass = MagicMock()
 
         with patch(
             "custom_components.indygo_pool.switch.async_call_later"
@@ -335,17 +356,15 @@ class TestCommands:
         timer_target = mock_call_later.call_args[0][2]
         assert timer_target(None) is None
 
-        assert entity._cancel_delayed_refresh is None
         entity.hass.async_create_task.assert_called_once()
         # Close the coroutine handed to the task so it is not left un-awaited.
         entity.hass.async_create_task.call_args[0][0].close()
 
     @pytest.mark.asyncio
     async def test_removal_cancels_pending_refresh(self, mock_coordinator):
-        """Unloading during the delay window disarms the timer."""
+        """Unloading inside the follow-up window disarms every read."""
         mock_coordinator.data.modules = {"mod1": _module()}
         entity = _switch(mock_coordinator)
-        entity.hass = MagicMock()
 
         cancel_cb = MagicMock()
         with patch(
@@ -356,8 +375,8 @@ class TestCommands:
 
         await entity.async_will_remove_from_hass()
 
-        cancel_cb.assert_called_once()
-        assert entity._cancel_delayed_refresh is None
+        assert cancel_cb.call_count == len(DELAYED_REFRESH_SCHEDULE)
+        assert entity._pending_refreshes == []
 
     @pytest.mark.asyncio
     async def test_removal_without_pending_refresh_is_a_no_op(self, mock_coordinator):
@@ -367,7 +386,104 @@ class TestCommands:
 
         await entity.async_will_remove_from_hass()
 
-        assert entity._cancel_delayed_refresh is None
+        assert entity._pending_refreshes == []
+
+
+class TestOptimisticState:
+    """The requested state is reported until the board confirms it.
+
+    Without this, a controller that expects prompt confirmation — HomeKit —
+    reads the stale state, calls the command failed and retries in a burst.
+    """
+
+    @pytest.mark.asyncio
+    async def test_turn_on_reports_on_before_the_board_agrees(self, mock_coordinator):
+        """The board still says 0, the switch already says on."""
+        mock_coordinator.data.modules = {
+            "mod1": _module({"1": IndygoSensorData(key="circuit_1_status", value=0)})
+        }
+        entity = _switch(mock_coordinator)
+        assert entity.is_on is False
+
+        with patch("custom_components.indygo_pool.switch.async_call_later"):
+            await entity.async_turn_on()
+
+        assert entity.is_on is True
+        assert entity.extra_state_attributes["state_source"] == "optimistic"
+
+    @pytest.mark.asyncio
+    async def test_turn_off_reports_off_before_the_board_agrees(self, mock_coordinator):
+        """Symmetric: the board still says 1, the switch already says off."""
+        mock_coordinator.data.modules = {
+            "mod1": _module({"1": IndygoSensorData(key="circuit_1_status", value=1)})
+        }
+        entity = _switch(mock_coordinator)
+        assert entity.is_on is True
+
+        with patch("custom_components.indygo_pool.switch.async_call_later"):
+            await entity.async_turn_off()
+
+        assert entity.is_on is False
+
+    @pytest.mark.asyncio
+    async def test_optimistic_clears_once_the_board_confirms(self, mock_coordinator):
+        """When the board catches up, the entity goes back to reporting it."""
+        mock_coordinator.data.modules = {
+            "mod1": _module({"1": IndygoSensorData(key="circuit_1_status", value=0)})
+        }
+        entity = _switch(mock_coordinator)
+
+        with patch("custom_components.indygo_pool.switch.async_call_later"):
+            await entity.async_turn_on()
+
+        # The board now reports the circuit powered.
+        mock_coordinator.data.modules = {
+            "mod1": _module({"1": IndygoSensorData(key="circuit_1_status", value=1)})
+        }
+
+        assert entity.is_on is True
+        assert entity.extra_state_attributes["state_source"] == "circuit"
+        assert entity._optimistic is None
+
+    @pytest.mark.asyncio
+    async def test_optimistic_expires_when_the_command_never_lands(
+        self, mock_coordinator
+    ):
+        """A command that never took effect must stop being reported as if it had."""
+        mock_coordinator.data.modules = {
+            "mod1": _module({"1": IndygoSensorData(key="circuit_1_status", value=0)})
+        }
+        entity = _switch(mock_coordinator)
+
+        with patch("custom_components.indygo_pool.switch.async_call_later"):
+            await entity.async_turn_on()
+        assert entity.is_on is True
+
+        # Well past the window, board still reporting 0.
+        entity._optimistic_expires = 0.0
+
+        assert entity.is_on is False
+        assert entity.extra_state_attributes["state_source"] == "circuit"
+
+    @pytest.mark.asyncio
+    async def test_failed_write_leaves_no_optimistic_state(self, mock_coordinator):
+        """A write that raised must not leave the entity claiming success."""
+        mock_coordinator.data.modules = {
+            "mod1": _module({"1": IndygoSensorData(key="circuit_1_status", value=0)})
+        }
+        mock_coordinator.client.async_set_program_mode.side_effect = RuntimeError(
+            "nope"
+        )
+        entity = _switch(mock_coordinator)
+
+        with (
+            patch("custom_components.indygo_pool.switch.async_call_later"),
+            pytest.raises(RuntimeError),
+        ):
+            await entity.async_turn_on()
+
+        assert entity._optimistic is None
+        assert entity.is_on is False
 
 
 def test_unique_id_is_stable_per_circuit(mock_coordinator):
