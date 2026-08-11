@@ -17,11 +17,18 @@ from typing import Any
 
 import aiohttp
 
-from .const import LOGGER
+from .const import LOGGER, VERSION
 from .models import IndygoPoolData
 from .parser import IndygoParser
 
 BASE_URL = "https://myindygo.com"
+
+# Identify this client honestly on every request.  Without it aiohttp sends its
+# own default ("Python/3.x aiohttp/3.x"), which tells MyIndygo nothing except
+# that an unidentified script is talking to them.  A named client can be
+# recognised, contacted and rate-limited on its own terms; it also avoids ever
+# passing for the vendor's own app, which sending their user agent would do.
+USER_AGENT = f"ha-indygo-pool/{VERSION} (+https://github.com/FunFR/ha-indygo-pool)"
 
 # OAuth2 client credentials extracted from the Android APK (production).
 _OAUTH2_CLIENT_ID = "5d1c5bb0b4acd1c748988085"
@@ -84,7 +91,10 @@ class IndygoPoolApiClient:
         try:
             async with self._session.post(
                 f"{BASE_URL}/oauth2/token",
-                headers={"Authorization": f"Basic {_OAUTH2_BASIC}"},
+                headers={
+                    "Authorization": f"Basic {_OAUTH2_BASIC}",
+                    "User-Agent": USER_AGENT,
+                },
                 json={
                     "grant_type": "password",
                     "username": self._email,
@@ -159,6 +169,7 @@ class IndygoPoolApiClient:
         request_headers: dict[str, str] = {
             "Authorization": self._token,
             "Accept": "version=2.7",
+            "User-Agent": USER_AGENT,
         }
         if headers:
             request_headers.update(headers)
