@@ -16,7 +16,7 @@ Contributing to this project should be as easy and transparent as possible, whet
 
 ## 🛠️ Technology Stack & Environment
 
-- **Language**: Python 3.12+ (Type Hinting is MANDATORY)
+- **Language**: Python 3.14.2+ (Type Hinting is MANDATORY)
 - **Dependency Management**: [uv](https://docs.astral.sh/uv/)
 - **Linting & Formatting**: `ruff`
 - **Testing**: `pytest`
