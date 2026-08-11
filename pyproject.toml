@@ -34,6 +34,7 @@ dev = [
     "commitizen>=4.10.1",
     "python-dotenv>=1.2.1",
     "pytest-cov",
+    "packaging>=24",
 ]
 
 [tool.ruff]
