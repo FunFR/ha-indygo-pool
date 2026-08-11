@@ -51,6 +51,7 @@ exclude-contributors:
   - "FunFR"
   - "renovate"
   - "github-actions"
+  - "cursoragent"
 no-contributors-template: "_No external contributions in this release._"
 
 version-resolver:
