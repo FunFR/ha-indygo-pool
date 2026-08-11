@@ -11,7 +11,7 @@ exclude = ["tests", "config", "docs"]
 name = "ha-indygo-pool"
 version = "0.0.0"
 description = "Home Assistant integration for Indygo Pool"
-requires-python = ">=3.12"
+requires-python = ">=3.14.2"
 authors = [
     { name = "FunFR" }
 ]
