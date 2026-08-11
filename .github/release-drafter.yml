@@ -47,6 +47,12 @@ categories:
 change-template: "- $TITLE (#$NUMBER) @$AUTHOR"
 change-title-escapes: '\<*_&'
 
+exclude-contributors:
+  - "FunFR"
+  - "renovate"
+  - "github-actions"
+no-contributors-template: "_No external contributions in this release._"
+
 version-resolver:
   major:
     labels:
@@ -69,5 +75,9 @@ template: |
   ## What's Changed
 
   $CHANGES
+
+  ## 🙌 External Contributors
+
+  $CONTRIBUTORS
 
   **Full Changelog**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
