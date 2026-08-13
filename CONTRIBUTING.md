@@ -102,3 +102,10 @@ scp -r custom_components/indygo_pool root@<HA_IP>:/config/custom_components/
 - **Fix**: `uv run ruff check --fix .`
 - **Format**: `uv run ruff format .`
 - **Pre-commit**: `uv run pre-commit run --all-files`
+
+## 🚀 Release Process
+
+Merges batch into one running draft ([Release Drafter](.github/workflows/release-drafter.yml)), published manually when ready:
+
+1. Publish the draft under [Releases](https://github.com/FunFR/ha-indygo-pool/releases). Defaults to **pre-release** (HACS beta channel) for a few days of testing.
+2. Edit the same release, uncheck "Set as a pre-release" to promote it to latest.
