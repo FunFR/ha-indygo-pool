@@ -1,3 +1,5 @@
+<img src="custom_components/indygo_pool/brand/icon.png" alt="Indygo Pool" width="120" align="right">
+
 # Indygo Pool for Home Assistant
 
 [![GitHub Release][releases-shield]][releases]
