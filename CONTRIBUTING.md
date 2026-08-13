@@ -105,12 +105,7 @@ scp -r custom_components/indygo_pool root@<HA_IP>:/config/custom_components/
 
 ## 🚀 Release Process
 
-Merging a PR to `main` does not itself publish a release: [Release Drafter](.github/workflows/release-drafter.yml) accumulates every merge (including Renovate's) into a single running **draft** release, bumping the version by label (`breaking`/`feature`/`fix`/etc.) as PRs land. This lets several merges batch into one release instead of one release per merge.
+Merges batch into one running draft ([Release Drafter](.github/workflows/release-drafter.yml)), published manually when ready:
 
-When ready to cut a release:
-
-1. Open the draft under [Releases](https://github.com/FunFR/ha-indygo-pool/releases) and review its changelog.
-2. Publish it. It defaults to **pre-release**, which HACS only surfaces to users with "Show beta versions" enabled; use this window to ask affected users to test.
-3. After it's run a few days with no reports, edit the same release and uncheck "Set as a pre-release". No retagging needed: it becomes the latest release for all HACS users.
-
-Publishing (in either mode) triggers the [release workflow](.github/workflows/release.yml), which stamps the tag's version into `manifest.json` and attaches `indygo_pool.zip`.
+1. Publish the draft under [Releases](https://github.com/FunFR/ha-indygo-pool/releases). Defaults to **pre-release** (HACS beta channel) for a few days of testing.
+2. Edit the same release, uncheck "Set as a pre-release" to promote it to latest.
