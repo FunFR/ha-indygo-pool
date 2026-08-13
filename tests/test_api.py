@@ -37,6 +37,7 @@ TEST_MODULE_ID = "mod_123"
 TEST_RELAY_ID = "relay_123"
 TEST_POOL_ADDRESS = "pool_123"
 TEST_SERIAL = "SERIAL_ABC"
+TEST_SENSOR_ONLY_TEMP = 31.19
 
 TOKEN_RESPONSE = {
     "access_token": "fake_access_token",
@@ -741,21 +742,47 @@ async def test_get_data_with_ipx_module():
 
 
 @pytest.mark.asyncio
-async def test_get_data_missing_hardware_ids():
-    """Test error when no compatible module found."""
+async def test_get_data_missing_hardware_ids_falls_back_to_sensor_only():
+    """No lr-pc/ipx module (e.g. LR-MB gateway + Pool Guard² only) degrades
+    to sensor-only mode instead of failing setup — see issue #216."""
     if aioresponses is None:
         pytest.skip("aioresponses not installed")
+
+    modules = [
+        {"id": "gw_1", "type": "lr-mb-10", "name": "LRMB10-01", "typeIsRelay": True},
+        {
+            "id": "pg_1",
+            "type": "lr-pg2",
+            "name": "LRPG2-0D0C15",
+            "typeIsSensor": True,
+            "typeIsPoolProduct": True,
+        },
+    ]
 
     with aioresponses() as m:
         m.post(
             f"{BASE_URL}/api/getUserWithHisModules",
-            payload={"modules": [{"id": "x", "type": "unknown"}]},
+            payload={"modules": modules},
+        )
+        m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
+        m.post(f"{BASE_URL}/api/getModuleWithHisPrograms", payload={"programs": []})
+        m.post(
+            f"{BASE_URL}/api/getPoolStatus",
+            payload={
+                "temperature": {"value": TEST_SENSOR_ONLY_TEMP},
+                "lastPhMeasure": {"value": 8.33},
+                "lastRedoxMeasure": {"value": 799},
+            },
         )
 
         async with aiohttp.ClientSession() as session:
             client = _make_client(session)
-            with pytest.raises(IndygoPoolApiClientError, match="Could not determine"):
-                await client.async_get_data()
+            data = await client.async_get_data()
+
+            assert client._pool_address is None
+            assert client._device_short_id is None
+            assert client._relay_id is None
+            assert data.sensors["temperature"].value == TEST_SENSOR_ONLY_TEMP
 
 
 @pytest.mark.asyncio

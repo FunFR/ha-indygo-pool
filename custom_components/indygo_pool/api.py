@@ -78,6 +78,7 @@ class IndygoPoolApiClient:
         self._pool_address: str | None = None
         self._device_short_id: str | None = None
         self._relay_id: str | None = None
+        self._hardware_resolved = False
 
         # Cached rich data
         self._data: IndygoPoolData | None = None
@@ -286,8 +287,13 @@ class IndygoPoolApiClient:
         )
 
     async def _resolve_hardware_ids(self, modules: list[dict]) -> None:
-        """Resolve pool_address, device_short_id and relay_id from modules."""
-        if self._pool_address and self._device_short_id and self._relay_id:
+        """Resolve pool_address, device_short_id and relay_id from modules.
+
+        No lr-pc/ipx module (e.g. LR-MB gateway + Pool Guard² only) means
+        nothing to control, but root sensors still work — degrade instead
+        of failing setup.
+        """
+        if self._hardware_resolved:
             return
 
         pool_address, device_short_id, relay_id = self._parser.resolve_hardware_ids(
@@ -295,14 +301,18 @@ class IndygoPoolApiClient:
         )
 
         if not pool_address or not device_short_id or not relay_id:
-            raise IndygoPoolApiClientError(
-                "Could not determine Pool Address, Device Short ID, or Relay ID "
-                f"from {len(modules)} modules."
+            LOGGER.warning(
+                "No lr-pc/ipx module found in %d modules — falling back to "
+                "sensor-only mode (no filtration/relay control available).",
+                len(modules),
             )
+            self._hardware_resolved = True
+            return
 
         self._pool_address = pool_address
         self._device_short_id = device_short_id
         self._relay_id = relay_id
+        self._hardware_resolved = True
 
     async def async_get_data(self) -> IndygoPoolData:
         """Get data from the API."""
@@ -326,17 +336,19 @@ class IndygoPoolApiClient:
         status_data = await self._fetch_pool_status()
 
         # 4b. Merge pump circuit data from device endpoint when available.
-        # Some hardware returns 408 — skip gracefully in that case.
-        try:
-            device_status = await self._fetch_device_status()
-            for key in ("pool", "sensorState", "dialogTimeStamp"):
-                if key in device_status:
-                    status_data[key] = device_status[key]
-        except IndygoPoolApiClientCommunicationError:
-            LOGGER.debug(
-                "Device status endpoint unavailable for %s — pump circuits skipped",
-                self._pool_address,
-            )
+        # Some hardware returns 408 — skip gracefully in that case. Sensor-only
+        # hardware has no pool_address/device_short_id to query at all.
+        if self._pool_address and self._device_short_id:
+            try:
+                device_status = await self._fetch_device_status()
+                for key in ("pool", "sensorState", "dialogTimeStamp"):
+                    if key in device_status:
+                        status_data[key] = device_status[key]
+            except IndygoPoolApiClientCommunicationError:
+                LOGGER.debug(
+                    "Device status endpoint unavailable for %s — pump circuits skipped",
+                    self._pool_address,
+                )
 
         # 5. Merge modules metadata into the status data
         status_data["modules"] = modules
