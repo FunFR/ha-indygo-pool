@@ -385,3 +385,36 @@ async def test_options_flow_changed_interval(hass: HomeAssistant) -> None:
 
     assert result2["type"] == FlowResultType.CREATE_ENTRY
     assert entry.options[CONF_SCAN_INTERVAL] == CUSTOM_SCAN_INTERVAL
+
+
+@pytest.mark.asyncio
+async def test_options_flow_changed_interval_reloads_entry(
+    hass: HomeAssistant,
+) -> None:
+    """Test that saving a changed scan interval schedules a reload of the entry."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="test_email",
+        data={
+            CONF_EMAIL: "test_email",
+            CONF_PASSWORD: "test_password",
+            CONF_POOL_ID: "test_pool",
+        },
+        unique_id="test_pool",
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+
+    with patch(
+        "homeassistant.config_entries.ConfigEntries.async_schedule_reload"
+    ) as mock_schedule_reload:
+        result2 = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            {CONF_SCAN_INTERVAL: CUSTOM_SCAN_INTERVAL},
+        )
+        await hass.async_block_till_done()
+
+    assert result2["type"] == FlowResultType.CREATE_ENTRY
+    assert entry.options[CONF_SCAN_INTERVAL] == CUSTOM_SCAN_INTERVAL
+    mock_schedule_reload.assert_called_once_with(entry.entry_id)

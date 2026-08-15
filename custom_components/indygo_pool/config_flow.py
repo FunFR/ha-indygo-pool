@@ -7,6 +7,7 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.const import UnitOfTime
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.selector import (
@@ -188,7 +189,7 @@ class IndygoPoolFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         return IndygoPoolOptionsFlowHandler()
 
 
-class IndygoPoolOptionsFlowHandler(config_entries.OptionsFlow):
+class IndygoPoolOptionsFlowHandler(config_entries.OptionsFlowWithReload):
     """Handle Indygo Pool options."""
 
     async def async_step_init(
@@ -214,7 +215,7 @@ class IndygoPoolOptionsFlowHandler(config_entries.OptionsFlow):
                             min=60,
                             max=3600,
                             step=30,
-                            unit_of_measurement="s",
+                            unit_of_measurement=UnitOfTime.SECONDS,
                             mode=NumberSelectorMode.BOX,
                         )
                     ),
