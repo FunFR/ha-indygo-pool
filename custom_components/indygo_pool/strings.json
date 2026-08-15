@@ -9,15 +9,43 @@
                     "password": "Password",
                     "pool_id": "Pool ID"
                 }
+            },
+            "reauth_confirm": {
+                "title": "Reauthenticate Indygo Pool",
+                "description": "Your MyIndygo password is no longer valid for {email}. Please enter the new password.",
+                "data": {
+                    "password": "Password"
+                }
+            },
+            "reconfigure": {
+                "title": "Reconfigure Indygo Pool",
+                "description": "Update your MyIndygo credentials or pool ID.",
+                "data": {
+                    "email": "Email",
+                    "password": "Password",
+                    "pool_id": "Pool ID"
+                }
             }
         },
         "error": {
             "auth": "Invalid credentials",
             "connection": "Communication error",
-            "unknown": "Unknown error"
+            "unknown": "Unknown error",
+            "already_configured": "This pool ID is already configured"
         },
         "abort": {
             "already_configured": "Device is already configured"
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Indygo Pool Options",
+                "description": "Configure how often the integration polls the MyIndygo API.",
+                "data": {
+                    "scan_interval": "Polling interval (seconds)"
+                }
+            }
         }
     },
     "entity": {

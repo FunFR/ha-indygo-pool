@@ -2,21 +2,50 @@
     "config": {
         "step": {
             "user": {
-                "title": "Indygo Pool Configuration",
-                "description": "Please enter your MyIndygo credentials.",
+                "title": "Configuration Indygo Pool",
+                "description": "Merci de saisir tes identifiants MyIndygo.",
                 "data": {
                     "email": "Email",
-                    "password": "Password"
+                    "password": "Mot de passe",
+                    "pool_id": "ID de la piscine"
+                }
+            },
+            "reauth_confirm": {
+                "title": "Réauthentification Indygo Pool",
+                "description": "Ton mot de passe MyIndygo n'est plus valide pour {email}. Merci de saisir le nouveau mot de passe.",
+                "data": {
+                    "password": "Mot de passe"
+                }
+            },
+            "reconfigure": {
+                "title": "Reconfiguration Indygo Pool",
+                "description": "Modifie tes identifiants MyIndygo ou l'ID de la piscine.",
+                "data": {
+                    "email": "Email",
+                    "password": "Mot de passe",
+                    "pool_id": "ID de la piscine"
                 }
             }
         },
         "error": {
-            "auth": "Invalid credentials",
-            "connection": "Communication error",
-            "unknown": "Unknown error"
+            "auth": "Identifiants invalides",
+            "connection": "Erreur de communication",
+            "unknown": "Erreur inconnue",
+            "already_configured": "Cet ID de piscine est déjà configuré"
         },
         "abort": {
-            "already_configured": "Device is already configured"
+            "already_configured": "Cet appareil est déjà configuré"
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Options Indygo Pool",
+                "description": "Configure la fréquence d'interrogation de l'API MyIndygo.",
+                "data": {
+                    "scan_interval": "Intervalle d'interrogation (secondes)"
+                }
+            }
         }
     },
     "entity": {

@@ -11,6 +11,7 @@ from custom_components.indygo_pool.api import (
     IndygoPoolApiClientAuthenticationError,
     IndygoPoolApiClientError,
 )
+from custom_components.indygo_pool.const import CONF_SCAN_INTERVAL
 from custom_components.indygo_pool.coordinator import IndygoPoolDataUpdateCoordinator
 
 
@@ -27,6 +28,7 @@ def mock_entry():
     """Mock config entry."""
     entry = MagicMock()
     entry.entry_id = "test_id"
+    entry.options = {}
     return entry
 
 
@@ -36,6 +38,16 @@ def test_coordinator_init(hass, mock_client, mock_entry):
     assert coordinator.client == mock_client
     assert coordinator.name == "indygo_pool"
     expected_interval = 300
+    assert coordinator.update_interval.total_seconds() == expected_interval
+
+
+def test_coordinator_init_custom_scan_interval(hass, mock_client, mock_entry):
+    """Test the coordinator honors a scan interval set via the options flow."""
+    mock_entry.options = {CONF_SCAN_INTERVAL: 120}
+
+    coordinator = IndygoPoolDataUpdateCoordinator(hass, mock_client, mock_entry)
+
+    expected_interval = 120
     assert coordinator.update_interval.total_seconds() == expected_interval
 
 

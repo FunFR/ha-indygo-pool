@@ -51,6 +51,12 @@ Add the integration: [![Add Integration][add-integration-badge]][add-integration
 4. Enter your MyIndygo credentials (email, password) and your **Pool ID**.
     > The **Pool ID** can be found in the URL after logging into myindygo.com (e.g., `https://myindygo.com/pools/<Pool ID>/devices`).
 
+### Reauthentication, reconfiguration and options
+
+- If your MyIndygo password changes, Home Assistant will prompt you to **reauthenticate** instead of requiring you to delete and recreate the integration.
+- To change your email, password or Pool ID after setup, open the integration and select **Reconfigure**.
+- To adjust how often the integration polls the MyIndygo API (default: every 5 minutes), open the integration and select **Configure**.
+
 ## Contributing
 
 We welcome contributions! Please review [CONTRIBUTING.md](CONTRIBUTING.md) for environment setup and pull request guidelines. If you are an AI agent or looking for project architecture rules, refer to [AGENTS.md](AGENTS.md).

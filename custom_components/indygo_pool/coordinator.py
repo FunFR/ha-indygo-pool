@@ -17,7 +17,7 @@ from .api import (
     IndygoPoolApiClientAuthenticationError,
     IndygoPoolApiClientError,
 )
-from .const import DOMAIN, LOGGER
+from .const import CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL, DOMAIN, LOGGER
 from .models import IndygoPoolData
 
 
@@ -39,7 +39,9 @@ class IndygoPoolDataUpdateCoordinator(DataUpdateCoordinator[IndygoPoolData]):
             hass,
             LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(minutes=5),
+            update_interval=timedelta(
+                seconds=entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+            ),
             config_entry=entry,
         )
 
