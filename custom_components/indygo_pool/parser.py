@@ -322,7 +322,7 @@ class IndygoParser:
         filt_module: IndygoModuleData | None = None,
     ) -> None:
         """Parse root level sensors."""
-        root_sensors_map = {
+        root_sensors_map: dict[str, dict[str, Any]] = {
             "temperature": {
                 "sensor_key": "temperature",
                 "attributes": {"date": "last_measurement_time"},
