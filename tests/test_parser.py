@@ -319,6 +319,15 @@ class TestIndygoParser:
         )
         assert target == {}
 
+    def test_parse_input_sensors_skips_non_int_type(self):
+        """Test inputs with a non-int type are ignored instead of raising."""
+        target = {}
+        IndygoParser._parse_input_sensors(
+            [{"type": "7", "lastValue": {"value": 1}}],
+            target,
+        )
+        assert target == {}
+
     def test_parse_filtration_schedule_as_attributes(self):
         """Test schedule is exposed as attributes on the filtration status."""
         parser = IndygoParser()

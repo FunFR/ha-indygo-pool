@@ -138,6 +138,8 @@ async def async_setup_entry(
 class IndygoPoolCircuitSwitch(IndygoPoolEntity, SwitchEntity):
     """A single auxiliary circuit of a Pool Command board."""
 
+    _module_id: str
+
     def __init__(
         self,
         *,
@@ -267,7 +269,9 @@ class IndygoPoolCircuitSwitch(IndygoPoolEntity, SwitchEntity):
             source = "program_mode"
         return {
             "circuit_index": self._circuit_index,
-            "program_mode": PROGRAM_MODE_NAMES.get(mode, mode),
+            "program_mode": (
+                PROGRAM_MODE_NAMES.get(mode, mode) if mode is not None else None
+            ),
             "state_source": source,
         }
 

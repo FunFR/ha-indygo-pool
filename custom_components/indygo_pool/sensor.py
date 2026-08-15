@@ -29,7 +29,7 @@ from .entity import IndygoPoolEntity
 from .models import IndygoSensorData
 
 
-@dataclass
+@dataclass(frozen=True)
 class IndygoSensorEntityDescription(SensorEntityDescription):
     """Class describing Indygo Pool sensor entities."""
 

@@ -31,6 +31,16 @@ jobs:
         run: uv run ruff check --output-format=github .
       - name: Check formatting with ruff
         run: uv run ruff format --check .
+      - name: Check types with mypy
+        run: uv run mypy custom_components/indygo_pool
+      - name: Scan dev dependencies for known vulnerabilities
+        # TODO: drop this aiohttp exclusion once
+        # https://github.com/pnuckowski/aioresponses/issues/289 is fixed and
+        # the <3.14 pin (pyproject.toml) is lifted.
+        run: |
+          uv export --only-group dev --no-hashes --no-emit-project -o requirements-audit.txt
+          grep -v '^aiohttp==' requirements-audit.txt > requirements-audit-filtered.txt
+          uv run pip-audit -r requirements-audit-filtered.txt --disable-pip --no-deps
       - name: Run tests with coverage
         run: uv run pytest -m "not integration"
       - name: Determine declared requires-python floor

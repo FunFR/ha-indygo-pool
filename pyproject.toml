@@ -35,6 +35,7 @@ dev = [
     "python-dotenv>=1.2.1",
     "pytest-cov",
     "packaging>=24",
+    "pip-audit>=2.7",
 ]
 
 [tool.ruff]
@@ -44,6 +45,15 @@ target-version = "py314"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "PL"]
 ignore = ["PLR0913"]
+
+[tool.mypy]
+python_version = "3.14"
+# Tests mock HA/aioresponses internals in ways mypy can't model (attribute
+# reassignment on final methods, etc.): scope enforcement to the integration
+# code that CI actually runs mypy against.
+exclude = ["^tests/"]
+warn_unused_ignores = true
+warn_redundant_casts = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

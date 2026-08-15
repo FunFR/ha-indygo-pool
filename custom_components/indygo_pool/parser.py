@@ -25,7 +25,7 @@ INPUT_SENSOR_TYPES = {
 }
 
 
-def _get_nested(obj: dict | list | None, *keys: str) -> Any:
+def _get_nested(obj: dict | list | None, *keys: str | int) -> Any:
     """Safely traverse nested dicts/lists by key or index."""
     for k in keys:
         if not isinstance(obj, (dict, list)):
@@ -141,8 +141,8 @@ class IndygoParser:
         self,
         json_data: dict,
         pool_id: str,
-        pool_address: str,
-        relay_id: str,
+        pool_address: str | None,
+        relay_id: str | None,
     ) -> IndygoPoolData:
         """Parse the API response into a structured IndygoPoolData object."""
         pool_data = IndygoPoolData(
@@ -427,7 +427,10 @@ class IndygoParser:
             return
 
         for inp in inputs:
-            sensor_key = INPUT_SENSOR_TYPES.get(inp.get("type"))
+            input_type = inp.get("type")
+            if not isinstance(input_type, int):
+                continue
+            sensor_key = INPUT_SENSOR_TYPES.get(input_type)
             if not sensor_key:
                 continue
 

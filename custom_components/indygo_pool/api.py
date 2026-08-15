@@ -13,7 +13,7 @@ import base64
 import copy
 import time
 from http import HTTPStatus
-from typing import Any
+from typing import Any, cast
 
 import aiohttp
 
@@ -166,6 +166,7 @@ class IndygoPoolApiClient:
         Automatically adds the Bearer token and retries once on 401/403.
         """
         await self._ensure_token()
+        assert self._token is not None  # set by _ensure_token above
 
         request_headers: dict[str, str] = {
             "Authorization": self._token,
@@ -229,17 +230,34 @@ class IndygoPoolApiClient:
                 f"Error communicating with API: {exc}"
             ) from exc
 
+    async def _request_json(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: dict | None = None,
+        json_body: dict | None = None,
+    ) -> dict:
+        """Perform a request and return the parsed JSON body as a dict."""
+        return cast(
+            dict,
+            await self._request(
+                method,
+                url,
+                headers=headers,
+                json_body=json_body,
+                return_json=True,
+            ),
+        )
+
     # ------------------------------------------------------------------
     # API data helpers
     # ------------------------------------------------------------------
 
     async def _api_call(self, method: str, path: str, body: dict | None = None) -> dict:
         """Perform an API call and return JSON."""
-        return await self._request(
-            method,
-            f"{BASE_URL}{path}",
-            json_body=body or {},
-            return_json=True,
+        return await self._request_json(
+            method, f"{BASE_URL}{path}", json_body=body or {}
         )
 
     async def _api_post(self, path: str, body: dict | None = None) -> dict:
@@ -279,11 +297,10 @@ class IndygoPoolApiClient:
         url = (
             f"{BASE_URL}/v1/module/{self._pool_address}/status/{self._device_short_id}"
         )
-        return await self._request(
+        return await self._request_json(
             "GET",
             url,
             headers={"x-requested-with": "XMLHttpRequest"},
-            return_json=True,
         )
 
     async def _resolve_hardware_ids(self, modules: list[dict]) -> None:
