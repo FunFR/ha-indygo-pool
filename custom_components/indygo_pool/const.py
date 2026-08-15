@@ -15,6 +15,10 @@ VERSION: str = json.loads((Path(__file__).parent / "manifest.json").read_text())
 CONF_EMAIL = "email"
 CONF_PASSWORD = "password"
 CONF_POOL_ID = "pool_id"
+CONF_SCAN_INTERVAL = "scan_interval"
+
+# Default polling interval, in seconds (matches the previous hardcoded value).
+DEFAULT_SCAN_INTERVAL = 300
 
 PROGRAM_TYPE_FILTRATION = 4
 # Spotlight / pool light program. Confirmed on LR-PC hardware: the vendor apps

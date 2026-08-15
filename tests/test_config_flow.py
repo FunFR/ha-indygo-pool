@@ -18,8 +18,12 @@ from custom_components.indygo_pool.const import (
     CONF_EMAIL,
     CONF_PASSWORD,
     CONF_POOL_ID,
+    CONF_SCAN_INTERVAL,
+    DEFAULT_SCAN_INTERVAL,
     DOMAIN,
 )
+
+CUSTOM_SCAN_INTERVAL = 120
 
 original_iterdir = pathlib.Path.iterdir
 
@@ -140,3 +144,277 @@ async def test_form_already_configured(hass: HomeAssistant) -> None:
 
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "already_configured"
+
+
+@pytest.mark.asyncio
+async def test_reauth_success(hass: HomeAssistant) -> None:
+    """Test a successful reauthentication flow updates the stored password."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="test_email",
+        data={
+            CONF_EMAIL: "test_email",
+            CONF_PASSWORD: "old_password",
+            CONF_POOL_ID: "test_pool",
+        },
+        unique_id="test_pool",
+    )
+    entry.add_to_hass(hass)
+
+    result = await entry.start_reauth_flow(hass)
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "reauth_confirm"
+
+    with patch(
+        "custom_components.indygo_pool.config_flow.IndygoPoolApiClient.async_get_data",
+        new_callable=AsyncMock,
+    ):
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_PASSWORD: "new_password"},
+        )
+        await hass.async_block_till_done()
+
+    assert result2["type"] == FlowResultType.ABORT
+    assert result2["reason"] == "reauth_successful"
+    assert entry.data[CONF_PASSWORD] == "new_password"
+    assert entry.data[CONF_EMAIL] == "test_email"
+
+
+@pytest.mark.asyncio
+async def test_reauth_wrong_password(hass: HomeAssistant) -> None:
+    """Test reauthentication with an invalid password shows an error."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="test_email",
+        data={
+            CONF_EMAIL: "test_email",
+            CONF_PASSWORD: "old_password",
+            CONF_POOL_ID: "test_pool",
+        },
+        unique_id="test_pool",
+    )
+    entry.add_to_hass(hass)
+
+    result = await entry.start_reauth_flow(hass)
+
+    with patch(
+        "custom_components.indygo_pool.config_flow.IndygoPoolApiClient.async_get_data",
+        side_effect=IndygoPoolApiClientAuthenticationError("test error"),
+    ):
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_PASSWORD: "wrong_password"},
+        )
+        await hass.async_block_till_done()
+
+    assert result2["type"] == FlowResultType.FORM
+    assert result2["step_id"] == "reauth_confirm"
+    assert result2["errors"] == {"base": "auth"}
+    assert entry.data[CONF_PASSWORD] == "old_password"
+
+
+@pytest.mark.asyncio
+async def test_reconfigure_success(hass: HomeAssistant) -> None:
+    """Test a successful reconfiguration updates email, password and pool ID."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="test_email",
+        data={
+            CONF_EMAIL: "test_email",
+            CONF_PASSWORD: "old_password",
+            CONF_POOL_ID: "test_pool",
+        },
+        unique_id="test_pool",
+    )
+    entry.add_to_hass(hass)
+
+    result = await entry.start_reconfigure_flow(hass)
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "reconfigure"
+
+    with patch(
+        "custom_components.indygo_pool.config_flow.IndygoPoolApiClient.async_get_data",
+        new_callable=AsyncMock,
+    ):
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {
+                CONF_EMAIL: "new_email",
+                CONF_PASSWORD: "new_password",
+                CONF_POOL_ID: "new_pool",
+            },
+        )
+        await hass.async_block_till_done()
+
+    assert result2["type"] == FlowResultType.ABORT
+    assert result2["reason"] == "reconfigure_successful"
+    assert entry.data[CONF_EMAIL] == "new_email"
+    assert entry.data[CONF_PASSWORD] == "new_password"
+    assert entry.data[CONF_POOL_ID] == "new_pool"
+    assert entry.unique_id == "new_pool"
+
+
+@pytest.mark.asyncio
+async def test_reconfigure_wrong_password(hass: HomeAssistant) -> None:
+    """Test reconfiguration with an invalid password shows an error."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="test_email",
+        data={
+            CONF_EMAIL: "test_email",
+            CONF_PASSWORD: "old_password",
+            CONF_POOL_ID: "test_pool",
+        },
+        unique_id="test_pool",
+    )
+    entry.add_to_hass(hass)
+
+    result = await entry.start_reconfigure_flow(hass)
+
+    with patch(
+        "custom_components.indygo_pool.config_flow.IndygoPoolApiClient.async_get_data",
+        side_effect=IndygoPoolApiClientAuthenticationError("test error"),
+    ):
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {
+                CONF_EMAIL: "test_email",
+                CONF_PASSWORD: "wrong_password",
+                CONF_POOL_ID: "test_pool",
+            },
+        )
+        await hass.async_block_till_done()
+
+    assert result2["type"] == FlowResultType.FORM
+    assert result2["step_id"] == "reconfigure"
+    assert result2["errors"] == {"base": "auth"}
+    assert entry.data[CONF_PASSWORD] == "old_password"
+
+
+@pytest.mark.asyncio
+async def test_reconfigure_pool_id_conflict(hass: HomeAssistant) -> None:
+    """Test reconfiguring to a pool ID already used by another entry is rejected."""
+    other_entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="other_email",
+        data={
+            CONF_EMAIL: "other_email",
+            CONF_PASSWORD: "other_password",
+            CONF_POOL_ID: "other_pool",
+        },
+        unique_id="other_pool",
+    )
+    other_entry.add_to_hass(hass)
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="test_email",
+        data={
+            CONF_EMAIL: "test_email",
+            CONF_PASSWORD: "old_password",
+            CONF_POOL_ID: "test_pool",
+        },
+        unique_id="test_pool",
+    )
+    entry.add_to_hass(hass)
+
+    result = await entry.start_reconfigure_flow(hass)
+
+    result2 = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_EMAIL: "test_email",
+            CONF_PASSWORD: "old_password",
+            CONF_POOL_ID: "other_pool",
+        },
+    )
+
+    assert result2["type"] == FlowResultType.FORM
+    assert result2["step_id"] == "reconfigure"
+    assert result2["errors"] == {"base": "already_configured"}
+    assert entry.data[CONF_POOL_ID] == "test_pool"
+
+
+@pytest.mark.asyncio
+async def test_options_flow_default_value(hass: HomeAssistant) -> None:
+    """Test the options flow shows the default scan interval."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="test_email",
+        data={
+            CONF_EMAIL: "test_email",
+            CONF_PASSWORD: "test_password",
+            CONF_POOL_ID: "test_pool",
+        },
+        unique_id="test_pool",
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "init"
+    schema = result["data_schema"].schema
+    (scan_interval_key,) = [key for key in schema if key == CONF_SCAN_INTERVAL]
+    assert scan_interval_key.default() == DEFAULT_SCAN_INTERVAL
+
+
+@pytest.mark.asyncio
+async def test_options_flow_changed_interval(hass: HomeAssistant) -> None:
+    """Test a changed scan interval is stored in the entry options."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="test_email",
+        data={
+            CONF_EMAIL: "test_email",
+            CONF_PASSWORD: "test_password",
+            CONF_POOL_ID: "test_pool",
+        },
+        unique_id="test_pool",
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+
+    result2 = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {CONF_SCAN_INTERVAL: CUSTOM_SCAN_INTERVAL},
+    )
+    await hass.async_block_till_done()
+
+    assert result2["type"] == FlowResultType.CREATE_ENTRY
+    assert entry.options[CONF_SCAN_INTERVAL] == CUSTOM_SCAN_INTERVAL
+
+
+@pytest.mark.asyncio
+async def test_options_flow_changed_interval_reloads_entry(
+    hass: HomeAssistant,
+) -> None:
+    """Test that saving a changed scan interval schedules a reload of the entry."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="test_email",
+        data={
+            CONF_EMAIL: "test_email",
+            CONF_PASSWORD: "test_password",
+            CONF_POOL_ID: "test_pool",
+        },
+        unique_id="test_pool",
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+
+    with patch(
+        "homeassistant.config_entries.ConfigEntries.async_schedule_reload"
+    ) as mock_schedule_reload:
+        result2 = await hass.config_entries.options.async_configure(
+            result["flow_id"],
+            {CONF_SCAN_INTERVAL: CUSTOM_SCAN_INTERVAL},
+        )
+        await hass.async_block_till_done()
+
+    assert result2["type"] == FlowResultType.CREATE_ENTRY
+    assert entry.options[CONF_SCAN_INTERVAL] == CUSTOM_SCAN_INTERVAL
+    mock_schedule_reload.assert_called_once_with(entry.entry_id)
