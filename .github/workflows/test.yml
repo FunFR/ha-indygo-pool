@@ -34,16 +34,9 @@ jobs:
       - name: Check types with mypy
         run: uv run mypy custom_components/indygo_pool
       - name: Scan dev dependencies for known vulnerabilities
-        # Scoped to the `dev` dependency group (the only group with real,
-        # scannable packages: `dependencies` is empty since HA provides
-        # aiohttp etc. at runtime). `aiohttp` is excluded from the scan: it's
-        # capped at <3.14 for aioresponses compatibility
-        # (https://github.com/pnuckowski/aioresponses/issues/289, open), which
-        # means it permanently carries known CVEs already fixed upstream in
-        # 3.14+. pip-audit has no per-package suppression, only per-vuln-ID
-        # `--ignore-vuln`, which would need a growing, hand-maintained list as
-        # new CVEs get published against the same pinned version. Drop this
-        # exclusion once the cap is lifted.
+        # TODO: drop this aiohttp exclusion once
+        # https://github.com/pnuckowski/aioresponses/issues/289 is fixed and
+        # the <3.14 pin (pyproject.toml) is lifted.
         run: |
           uv export --only-group dev --no-hashes --no-emit-project -o requirements-audit.txt
           grep -v '^aiohttp==' requirements-audit.txt > requirements-audit-filtered.txt
