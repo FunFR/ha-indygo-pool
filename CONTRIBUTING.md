@@ -66,7 +66,7 @@ pool_id=your_pool_id
 ```
 Then run the integration tests using:
 ```bash
-uv run pytest -s -m integration tests
+uv run pytest -s -m integration tests --no-cov
 ```
 
 ### Sharing Diagnostics
