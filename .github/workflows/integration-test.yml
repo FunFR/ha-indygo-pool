@@ -1,0 +1,54 @@
+name: Integration Test
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Weekly, Monday 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-secrets:
+    name: Check secrets
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - name: Check required secrets are configured
+        id: check
+        env:
+          INDYGO_EMAIL: ${{ secrets.INDYGO_EMAIL }}
+          INDYGO_PASSWORD: ${{ secrets.INDYGO_PASSWORD }}
+          INDYGO_POOL_ID: ${{ secrets.INDYGO_POOL_ID }}
+        run: |
+          if [ -n "$INDYGO_EMAIL" ] && [ -n "$INDYGO_PASSWORD" ] && [ -n "$INDYGO_POOL_ID" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  integration-test:
+    name: Integration Test
+    needs: check-secrets
+    if: needs.check-secrets.outputs.configured == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Install uv
+        uses: astral-sh/setup-uv@ae62891fec2bb8e7d6c99fc78c9fec3a63790f8d # v10.0.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - name: "Set up Python"
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version-file: "pyproject.toml"
+      - name: Install dependencies
+        run: uv sync --all-extras --all-groups --frozen
+      - name: Run integration tests against real MyIndygo API
+        env:
+          email: ${{ secrets.INDYGO_EMAIL }}
+          password: ${{ secrets.INDYGO_PASSWORD }}
+          pool_id: ${{ secrets.INDYGO_POOL_ID }}
+        run: uv run pytest -s -m integration tests
