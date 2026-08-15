@@ -230,20 +230,34 @@ class IndygoPoolApiClient:
                 f"Error communicating with API: {exc}"
             ) from exc
 
+    async def _request_json(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: dict | None = None,
+        json_body: dict | None = None,
+    ) -> dict:
+        """Perform a request and return the parsed JSON body as a dict."""
+        return cast(
+            dict,
+            await self._request(
+                method,
+                url,
+                headers=headers,
+                json_body=json_body,
+                return_json=True,
+            ),
+        )
+
     # ------------------------------------------------------------------
     # API data helpers
     # ------------------------------------------------------------------
 
     async def _api_call(self, method: str, path: str, body: dict | None = None) -> dict:
         """Perform an API call and return JSON."""
-        return cast(
-            dict,
-            await self._request(
-                method,
-                f"{BASE_URL}{path}",
-                json_body=body or {},
-                return_json=True,
-            ),
+        return await self._request_json(
+            method, f"{BASE_URL}{path}", json_body=body or {}
         )
 
     async def _api_post(self, path: str, body: dict | None = None) -> dict:
@@ -283,14 +297,10 @@ class IndygoPoolApiClient:
         url = (
             f"{BASE_URL}/v1/module/{self._pool_address}/status/{self._device_short_id}"
         )
-        return cast(
-            dict,
-            await self._request(
-                "GET",
-                url,
-                headers={"x-requested-with": "XMLHttpRequest"},
-                return_json=True,
-            ),
+        return await self._request_json(
+            "GET",
+            url,
+            headers={"x-requested-with": "XMLHttpRequest"},
         )
 
     async def _resolve_hardware_ids(self, modules: list[dict]) -> None:

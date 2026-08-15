@@ -138,6 +138,8 @@ async def async_setup_entry(
 class IndygoPoolCircuitSwitch(IndygoPoolEntity, SwitchEntity):
     """A single auxiliary circuit of a Pool Command board."""
 
+    _module_id: str
+
     def __init__(
         self,
         *,
@@ -292,9 +294,9 @@ class IndygoPoolCircuitSwitch(IndygoPoolEntity, SwitchEntity):
             )
             return
 
-        module_id = self._module_id
-        assert module_id is not None  # always set for circuit switches
-        await self.coordinator.client.async_set_program_mode(module_id, program, mode)
+        await self.coordinator.client.async_set_program_mode(
+            self._module_id, program, mode
+        )
 
         # Report the requested state at once. Only after the write succeeded:
         # a failed command must not leave the entity claiming a state the
