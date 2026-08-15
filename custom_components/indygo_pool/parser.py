@@ -324,6 +324,15 @@ class IndygoParser:
         """Parse root level sensors."""
         root_sensors_map = {
             "temperature": {
+                "sensor_key": "temperature",
+                "attributes": {"date": "last_measurement_time"},
+            },
+            "lastPhMeasure": {
+                "sensor_key": "ph",
+                "attributes": {"date": "last_measurement_time"},
+            },
+            "lastRedoxMeasure": {
+                "sensor_key": "redox",
                 "attributes": {"date": "last_measurement_time"},
             },
         }
@@ -332,16 +341,19 @@ class IndygoParser:
 
         for key, config in root_sensors_map.items():
             if key in json_data and json_data[key] is not None:
-                temperature = json_data[key]
+                measure = json_data[key]
+                if not isinstance(measure, dict) or measure.get("value") is None:
+                    continue
+                sensor_key = config["sensor_key"]
                 extra_attributes = {}
                 attr_map = config.get("attributes", {})
                 for source_key, target_key in attr_map.items():
-                    if source_key in temperature:
-                        extra_attributes[target_key] = temperature[source_key]
+                    if source_key in measure:
+                        extra_attributes[target_key] = measure[source_key]
 
-                target_sensors[key] = IndygoSensorData(
-                    key=key,
-                    value=temperature["value"],
+                target_sensors[sensor_key] = IndygoSensorData(
+                    key=sensor_key,
+                    value=measure["value"],
                     extra_attributes=extra_attributes,
                 )
 
