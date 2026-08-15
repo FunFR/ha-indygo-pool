@@ -51,4 +51,4 @@ jobs:
           email: ${{ secrets.INDYGO_EMAIL }}
           password: ${{ secrets.INDYGO_PASSWORD }}
           pool_id: ${{ secrets.INDYGO_POOL_ID }}
-        run: uv run pytest -s -m integration tests
+        run: uv run pytest -s -m integration tests --no-cov
