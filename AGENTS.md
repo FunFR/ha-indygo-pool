@@ -31,6 +31,11 @@ This file serves as a guide for AI agents working on the `ha-indygo-pool` projec
 4.  **Verify & Commit**: You **MUST** follow the QA Checklist (testing, linting, formatting) and Tech Stack constraints defined in [CONTRIBUTING.md](CONTRIBUTING.md).
     - **Conventional Commits**: Use `feat:`, `fix:`, `refactor:`, etc., for SemVer. Keep commit messages **concise**.
     - **Breaking Changes**: ONLY flag a commit as a breaking change (`!`) if it fundamentally breaks the user's HA configuration (e.g., removing an entity entirely, changing the integration domain, or altering required config steps).
+    - **Mandatory local end-to-end check before any PR**: beyond `pytest tests`, run the real-API integration tests (`uv run pytest -s -m integration tests --no-cov`, needs `.env`) and a `docker compose up -d` smoke test (see [CONTRIBUTING.md](CONTRIBUTING.md#manual-config-testing-docker)). Confirm the coordinator logs `Finished fetching indygo_pool data ... (success: True)` with no `ERROR`/`Traceback`, and that every `indygo_pool` entity via `/api/states` is populated (no `unavailable`/`unknown`) — then `docker compose down`. This is how regressions on real hardware get caught; unit tests with mocked payloads are not sufficient on their own.
+
+## 🚀 Getting a fix to a reporter
+
+After merge, publish the resulting draft release (see [CONTRIBUTING.md](CONTRIBUTING.md#-release-process)) as a **pre-release**, not latest — only promote once the reporter confirms the fix on their hardware.
 
 ## 📚 References
 

@@ -768,6 +768,37 @@ class TestIndygoParser:
         assert ipx_mod.sensors["ph"].value == TEST_PH_IPX
         assert ipx_mod.sensors["ipx_salt"].value == TEST_SALT_IPX
 
+    def test_parse_data_root_ph_and_redox_sensor_only(self):
+        """Sensor-only hardware (LR-PG2, no lr-pc/ipx) reports pH/Redox at
+        root level via lastPhMeasure/lastRedoxMeasure — see issue #216."""
+        parser = IndygoParser()
+        json_data = {
+            "temperature": {"date": TEST_DATE, "value": TEST_TEMP_VALUE},
+            "lastPhMeasure": {"date": TEST_DATE, "value": TEST_PH_VALUE},
+            "lastRedoxMeasure": {"date": TEST_DATE, "value": TEST_REDOX_VALUE},
+        }
+
+        pool_data = parser.parse_data(json_data, "POOL1", None, None)
+
+        assert pool_data.sensors["ph"].value == TEST_PH_VALUE
+        assert (
+            pool_data.sensors["ph"].extra_attributes["last_measurement_time"]
+            == TEST_DATE
+        )
+        assert pool_data.sensors["redox"].value == TEST_REDOX_VALUE
+        assert (
+            pool_data.sensors["redox"].extra_attributes["last_measurement_time"]
+            == TEST_DATE
+        )
+
+    def test_parse_data_root_ph_ignores_missing_value(self):
+        """A lastPhMeasure entry without a value should not create a sensor."""
+        parser = IndygoParser()
+        pool_data = parser.parse_data(
+            {"lastPhMeasure": {"date": TEST_DATE}}, "POOL1", None, None
+        )
+        assert "ph" not in pool_data.sensors
+
 
 class TestGetNested:
     """Tests for the _get_nested helper."""
