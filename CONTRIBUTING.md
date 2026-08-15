@@ -89,6 +89,24 @@ The diagnostics include raw module data (`inputs`, `outputs`, `ipxData`) that re
 
 The `docker-compose.yml` file maps the `custom_components/indygo_pool` directory into the container. Restart HA to reflect code changes.
 
+#### Verifying the integration is healthy
+
+1. **Logs**: check the setup and every coordinator refresh succeeded, no traceback:
+   ```bash
+   docker compose logs --since 20m | grep -i "indygo\|error\|traceback\|exception"
+   ```
+   Look for `Setting up indygo_pool`, `Finished fetching indygo_pool data ... (success: True)`, and the absence of any `ERROR`/`Traceback` line.
+2. **Entity states via the REST API**: create a Home Assistant long-lived access token (Profile → Security → "Create Long-Lived Access Token") and store it as `ha_token` in `.env` (see `.env.example`), then:
+   ```bash
+   export HA_TOKEN=$(grep '^ha_token=' .env | cut -d= -f2)
+   curl -s -H "Authorization: Bearer $HA_TOKEN" http://localhost:8123/api/states \
+     | jq -r '.[] | select(.attributes.attribution=="Data provided by MyIndygo") | "\(.entity_id)\t\(.state)"'
+   unset HA_TOKEN
+   ```
+   All `indygo_pool` entities should have a populated state; none should be `unavailable` or `unknown`.
+
+`ha_token` authenticates against this local dev HA instance only, unrelated to the `email`/`password`/`pool_id` credentials above, which authenticate against the real MyIndygo API.
+
 ### Remote Deployment (Real HAOS)
 To quickly deploy local changes to a remote Home Assistant instance without Git:
 ```bash
