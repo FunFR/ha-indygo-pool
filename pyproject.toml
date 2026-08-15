@@ -35,6 +35,7 @@ dev = [
     "python-dotenv>=1.2.1",
     "pytest-cov",
     "packaging>=24",
+    "pip-audit>=2.7",
 ]
 
 [tool.ruff]

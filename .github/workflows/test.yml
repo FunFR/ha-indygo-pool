@@ -33,6 +33,30 @@ jobs:
         run: uv run ruff format --check .
       - name: Check types with mypy
         run: uv run mypy custom_components/indygo_pool
+      - name: Scan dev dependencies for known vulnerabilities
+        # Scoped to the `dev` dependency group (the only group with real,
+        # scannable packages: `dependencies` is empty since HA provides
+        # aiohttp etc. at runtime). The aiohttp findings below all stem from
+        # the <3.14 cap needed for aioresponses compatibility
+        # (https://github.com/pnuckowski/aioresponses/issues/289, open);
+        # drop the ignores once that cap is lifted.
+        run: |
+          uv export --only-group dev --no-hashes --no-emit-project -o requirements-audit.txt
+          uv run pip-audit -r requirements-audit.txt --disable-pip --no-deps \
+            --ignore-vuln PYSEC-2026-237 \
+            --ignore-vuln PYSEC-2026-2104 \
+            --ignore-vuln PYSEC-2026-2105 \
+            --ignore-vuln PYSEC-2026-2106 \
+            --ignore-vuln PYSEC-2026-2107 \
+            --ignore-vuln PYSEC-2026-2108 \
+            --ignore-vuln PYSEC-2026-2109 \
+            --ignore-vuln PYSEC-2026-2110 \
+            --ignore-vuln PYSEC-2026-2111 \
+            --ignore-vuln PYSEC-2026-2112 \
+            --ignore-vuln PYSEC-2026-2113 \
+            --ignore-vuln PYSEC-2026-3545 \
+            --ignore-vuln PYSEC-2026-3546 \
+            --ignore-vuln PYSEC-2026-3547
       - name: Run tests with coverage
         run: uv run pytest -m "not integration"
       - name: Determine declared requires-python floor
