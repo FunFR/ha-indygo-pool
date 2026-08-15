@@ -28,7 +28,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     client = IndygoPoolApiClient(
         email=entry.data[CONF_EMAIL],
         password=entry.data[CONF_PASSWORD],
-        pool_id=entry.data.get(CONF_POOL_ID),
+        pool_id=entry.data[CONF_POOL_ID],
         session=session,
     )
 

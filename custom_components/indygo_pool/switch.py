@@ -267,7 +267,9 @@ class IndygoPoolCircuitSwitch(IndygoPoolEntity, SwitchEntity):
             source = "program_mode"
         return {
             "circuit_index": self._circuit_index,
-            "program_mode": PROGRAM_MODE_NAMES.get(mode, mode),
+            "program_mode": (
+                PROGRAM_MODE_NAMES.get(mode, mode) if mode is not None else None
+            ),
             "state_source": source,
         }
 
@@ -290,9 +292,9 @@ class IndygoPoolCircuitSwitch(IndygoPoolEntity, SwitchEntity):
             )
             return
 
-        await self.coordinator.client.async_set_program_mode(
-            self._module_id, program, mode
-        )
+        module_id = self._module_id
+        assert module_id is not None  # always set for circuit switches
+        await self.coordinator.client.async_set_program_mode(module_id, program, mode)
 
         # Report the requested state at once. Only after the write succeeded:
         # a failed command must not leave the entity claiming a state the

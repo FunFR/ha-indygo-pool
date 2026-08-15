@@ -31,6 +31,8 @@ jobs:
         run: uv run ruff check --output-format=github .
       - name: Check formatting with ruff
         run: uv run ruff format --check .
+      - name: Check types with mypy
+        run: uv run mypy custom_components/indygo_pool
       - name: Run tests with coverage
         run: uv run pytest -m "not integration"
       - name: Determine declared requires-python floor

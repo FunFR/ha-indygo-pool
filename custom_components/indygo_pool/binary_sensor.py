@@ -21,7 +21,7 @@ from .coordinator import IndygoPoolDataUpdateCoordinator
 from .entity import IndygoPoolEntity
 
 
-@dataclass
+@dataclass(frozen=True)
 class IndygoBinarySensorEntityDescription(BinarySensorEntityDescription):
     """Class describing Indygo Pool binary sensor entities."""
 
