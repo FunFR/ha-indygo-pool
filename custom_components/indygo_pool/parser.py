@@ -325,14 +325,17 @@ class IndygoParser:
         root_sensors_map: dict[str, dict[str, Any]] = {
             "temperature": {
                 "sensor_key": "temperature",
+                "nested_key": "lastTemperatureMeasure",
                 "attributes": {"date": "last_measurement_time"},
             },
             "lastPhMeasure": {
                 "sensor_key": "ph",
+                "nested_key": "lastPhMeasure",
                 "attributes": {"date": "last_measurement_time"},
             },
             "lastRedoxMeasure": {
                 "sensor_key": "redox",
+                "nested_key": "lastRedoxMeasure",
                 "attributes": {"date": "last_measurement_time"},
             },
         }
@@ -340,22 +343,25 @@ class IndygoParser:
         target_sensors = filt_module.sensors if filt_module else pool_data.sensors
 
         for key, config in root_sensors_map.items():
-            if key in json_data and json_data[key] is not None:
-                measure = json_data[key]
-                if not isinstance(measure, dict) or measure.get("value") is None:
-                    continue
-                sensor_key = config["sensor_key"]
-                extra_attributes = {}
-                attr_map = config.get("attributes", {})
-                for source_key, target_key in attr_map.items():
-                    if source_key in measure:
-                        extra_attributes[target_key] = measure[source_key]
+            measure = json_data.get(key)
+            if measure is None:
+                measure = _get_nested(json_data, "status", config["nested_key"])
+            if measure is None:
+                continue
+            if not isinstance(measure, dict) or measure.get("value") is None:
+                continue
+            sensor_key = config["sensor_key"]
+            extra_attributes = {}
+            attr_map = config.get("attributes", {})
+            for source_key, target_key in attr_map.items():
+                if source_key in measure:
+                    extra_attributes[target_key] = measure[source_key]
 
-                target_sensors[sensor_key] = IndygoSensorData(
-                    key=sensor_key,
-                    value=measure["value"],
-                    extra_attributes=extra_attributes,
-                )
+            target_sensors[sensor_key] = IndygoSensorData(
+                key=sensor_key,
+                value=measure["value"],
+                extra_attributes=extra_attributes,
+            )
 
     def _parse_sensor_state(
         self,
