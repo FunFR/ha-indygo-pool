@@ -40,7 +40,12 @@ class IndygoPoolEntity(CoordinatorEntity[IndygoPoolDataUpdateCoordinator]):
                 name=module.name,
                 model=module.type.upper() if module.type else "Unknown",
                 manufacturer=NAME,
-                via_device=(DOMAIN, self._pool_unique_id),
+                # HA 2026.8 dropped `via_device` from the DeviceInfo TypedDict in
+                # favour of `via_device_id`, which takes a device registry id
+                # instead of an identifier tuple. Still honoured at runtime until
+                # HA 2027.8; migrating means resolving the parent device id at
+                # entity creation, so it is left for its own change.
+                via_device=(DOMAIN, self._pool_unique_id),  # type: ignore[typeddict-unknown-key]
             )
         else:
             self._attr_device_info = DeviceInfo(
