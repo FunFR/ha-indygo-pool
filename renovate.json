@@ -19,8 +19,7 @@
                 "digest",
                 "lockFileMaintenance"
             ],
-            "automerge": true,
-            "automergeType": "branch"
+            "automerge": true
         },
         {
             "matchDepTypes": [
