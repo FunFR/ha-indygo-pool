@@ -23,21 +23,15 @@
         },
         {
             "matchDepTypes": [
-                "dependencies"
+                "project.dependencies"
             ],
             "semanticCommitType": "fix"
         },
         {
             "matchDepTypes": [
-                "optional-dependencies",
-                "dev",
-                "devDependencies"
-            ],
-            "semanticCommitType": "chore"
-        },
-        {
-            "matchManagers": [
-                "pep621"
+                "project.dependencies",
+                "project.optional-dependencies",
+                "dependency-groups"
             ],
             "rangeStrategy": "update-lockfile"
         },
@@ -46,12 +40,6 @@
                 "github-actions"
             ],
             "semanticCommitType": "ci"
-        },
-        {
-            "matchManagers": [
-                "pre-commit"
-            ],
-            "semanticCommitType": "chore"
         }
     ]
 }
