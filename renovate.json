@@ -23,29 +23,24 @@
         },
         {
             "matchDepTypes": [
-                "dependencies"
+                "project.optional-dependencies",
+                "dependency-groups"
             ],
-            "semanticCommitType": "fix"
+            "semanticCommitType": "chore"
         },
         {
             "matchDepTypes": [
-                "optional-dependencies",
-                "dev",
-                "devDependencies"
+                "project.dependencies",
+                "project.optional-dependencies",
+                "dependency-groups"
             ],
-            "semanticCommitType": "chore"
+            "rangeStrategy": "update-lockfile"
         },
         {
             "matchManagers": [
                 "github-actions"
             ],
             "semanticCommitType": "ci"
-        },
-        {
-            "matchManagers": [
-                "pre-commit"
-            ],
-            "semanticCommitType": "chore"
         }
     ]
 }
