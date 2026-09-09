@@ -37,6 +37,12 @@
         },
         {
             "matchManagers": [
+                "pep621"
+            ],
+            "rangeStrategy": "update-lockfile"
+        },
+        {
+            "matchManagers": [
                 "github-actions"
             ],
             "semanticCommitType": "ci"

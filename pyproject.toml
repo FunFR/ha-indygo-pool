@@ -20,11 +20,11 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = [
-    "pytest-homeassistant-custom-component",
-    "pytest",
-    "ruff",
-    "mypy",
-    "pre-commit",
+    "pytest-homeassistant-custom-component>=0.13.363",
+    "pytest>=9.0.3",
+    "ruff>=0.16.0",
+    "mypy>=2.3.0",
+    "pre-commit>=4.6.1",
 ]
 
 [dependency-groups]
@@ -33,7 +33,7 @@ dev = [
     "aioresponses>=0.7.8",
     "commitizen>=4.10.1",
     "python-dotenv>=1.2.1",
-    "pytest-cov",
+    "pytest-cov>=7.1.0",
     "packaging>=24",
     "pip-audit>=2.7",
 ]
