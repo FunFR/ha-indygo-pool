@@ -23,9 +23,10 @@
         },
         {
             "matchDepTypes": [
-                "project.dependencies"
+                "project.optional-dependencies",
+                "dependency-groups"
             ],
-            "semanticCommitType": "fix"
+            "semanticCommitType": "chore"
         },
         {
             "matchDepTypes": [
