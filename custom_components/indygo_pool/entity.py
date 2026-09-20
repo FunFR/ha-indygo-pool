@@ -6,7 +6,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import slugify
 
-from .const import DOMAIN, NAME, VERSION
+from .const import DOMAIN, LOGGER, NAME, VERSION
 from .coordinator import IndygoPoolDataUpdateCoordinator
 
 
@@ -46,6 +46,11 @@ class IndygoPoolEntity(CoordinatorEntity[IndygoPoolDataUpdateCoordinator]):
             # failing, since `via_device_id` must point at a known device.
             if coordinator.pool_device_id:
                 self._attr_device_info["via_device_id"] = coordinator.pool_device_id
+            else:
+                LOGGER.debug(
+                    "No pool device id available, leaving module %s unlinked",
+                    module_id,
+                )
         else:
             self._attr_device_info = DeviceInfo(
                 identifiers={(DOMAIN, self._pool_unique_id)},

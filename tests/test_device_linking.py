@@ -1,6 +1,5 @@
 """Tests for how module devices link back to the parent pool device."""
 
-import os
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -8,7 +7,6 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-import custom_components
 from custom_components.indygo_pool.const import (
     CONF_EMAIL,
     CONF_PASSWORD,
@@ -18,24 +16,10 @@ from custom_components.indygo_pool.const import (
 from custom_components.indygo_pool.models import IndygoModuleData, IndygoPoolData
 
 
-@pytest.fixture(autouse=True)
-def prune_custom_components_path():
-    """Drop the editable-install finder stub from custom_components.__path__.
-
-    The editable install adds a path-hook entry that does not exist on disk;
-    Home Assistant's custom integration scan iterates every entry and raises
-    FileNotFoundError on it, which blocks any full config entry setup in tests.
-    """
-    original = list(custom_components.__path__)
-    custom_components.__path__ = [p for p in original if os.path.isdir(p)]
-    yield
-    custom_components.__path__ = original
-
-
 @pytest.mark.asyncio
 async def test_module_device_links_to_pool_without_deprecation(
-    hass: HomeAssistant, caplog
-):
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
     """Module devices link to the pool by registry id, not by identifier tuple."""
     data = IndygoPoolData(pool_id="pool123", raw_data={})
     data.modules["ipx123"] = IndygoModuleData(
