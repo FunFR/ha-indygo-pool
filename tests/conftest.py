@@ -1,9 +1,12 @@
 import inspect
+import os
 import socket
 from unittest.mock import Mock
 
 import aiohttp
 import pytest
+
+import custom_components
 
 # aiohttp 3.14 made ``stream_writer`` a required keyword-only argument of
 # ``ClientResponse.__init__``. aioresponses (0.7.9, latest) builds its mocked
@@ -43,6 +46,20 @@ _real_gethostbyname = socket.gethostbyname
 @pytest.fixture(autouse=True)
 def auto_enable_custom_integrations(enable_custom_integrations):
     yield
+
+
+@pytest.fixture(autouse=True)
+def prune_custom_components_path():
+    """Drop the editable-install finder stub from custom_components.__path__.
+
+    The editable install adds a path-hook entry that does not exist on disk;
+    Home Assistant's custom integration scan iterates every entry and raises
+    FileNotFoundError on it, which blocks any full config entry setup in tests.
+    """
+    original = list(custom_components.__path__)
+    custom_components.__path__ = [p for p in original if os.path.isdir(p)]
+    yield
+    custom_components.__path__ = original
 
 
 @pytest.fixture(autouse=True)

@@ -3,8 +3,8 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
+from custom_components.indygo_pool.coordinator import IndygoPoolDataUpdateCoordinator
 from custom_components.indygo_pool.models import (
     IndygoModuleData,
     IndygoPoolData,
@@ -27,7 +27,8 @@ MIN_ENTITIES = 2
 @pytest.fixture
 def mock_coordinator():
     """Mock the coordinator."""
-    coordinator = MagicMock(spec=DataUpdateCoordinator)
+    coordinator = MagicMock(spec=IndygoPoolDataUpdateCoordinator)
+    coordinator.pool_device_id = None
     coordinator.data = MagicMock(spec=IndygoPoolData)
     coordinator.data.sensors = {}
     coordinator.data.modules = {}

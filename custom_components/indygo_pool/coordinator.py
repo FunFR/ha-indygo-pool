@@ -26,6 +26,10 @@ class IndygoPoolDataUpdateCoordinator(DataUpdateCoordinator[IndygoPoolData]):
 
     config_entry: ConfigEntry
 
+    # Device registry id of the parent pool device, resolved during setup so
+    # module devices can link to it through `via_device_id`.
+    pool_device_id: str | None = None
+
     def __init__(
         self,
         hass: HomeAssistant,

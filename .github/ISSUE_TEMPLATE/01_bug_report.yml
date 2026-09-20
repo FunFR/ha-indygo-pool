@@ -15,15 +15,12 @@ body:
       placeholder: v1.0.0
     validations:
       required: true
-  - type: dropdown
+  - type: input
     id: ha_version
     attributes:
       label: Home Assistant Version
-      description: What version of Home Assistant are you running?
-      options:
-        - 2025.x
-        - 2024.x
-        - Older
+      description: Found under Settings > About.
+      placeholder: YYYY.M.PATCH
     validations:
       required: true
   - type: textarea
