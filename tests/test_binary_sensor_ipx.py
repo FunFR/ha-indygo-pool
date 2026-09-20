@@ -12,6 +12,7 @@ from custom_components.indygo_pool.models import IndygoModuleData, IndygoPoolDat
 @pytest.fixture
 def mock_coordinator():
     coordinator = MagicMock()
+    coordinator.pool_device_id = "pool-device-id"
     coordinator.data = IndygoPoolData(
         pool_id="pool123", address="addr123", relay_id="relay123", raw_data={}
     )
@@ -51,7 +52,7 @@ def test_ipx_binary_sensors(mock_coordinator):
     assert shutter.is_on is False
     assert shutter.unique_id == "pool123_ipx123_shutterEntry"
     assert shutter.device_info["name"] == "IPX Module"
-    assert shutter.device_info["via_device"] == ("indygo_pool", "pool123")
+    assert shutter.device_info["via_device_id"] == "pool-device-id"
 
     # Test Flow
     flow = IndygoPoolBinarySensor(mock_coordinator, desc_map["flowEntry"], "ipx123")

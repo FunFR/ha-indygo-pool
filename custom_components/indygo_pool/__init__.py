@@ -40,12 +40,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await coordinator.async_config_entry_first_refresh()
 
-    # Register the parent pool device before platform setup so that
-    # module devices can reference it via `via_device` without errors.
+    # Register the parent pool device before platform setup so that module
+    # devices can link to it by registry id through `via_device_id`.
     if coordinator.data and coordinator.data.pool_id:
         pool_id = coordinator.data.pool_id
         device_reg = dr.async_get(hass)
-        device_reg.async_get_or_create(
+        pool_device = device_reg.async_get_or_create(
             config_entry_id=entry.entry_id,
             **DeviceInfo(
                 identifiers={(DOMAIN, pool_id)},
@@ -54,6 +54,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 manufacturer=NAME,
             ),
         )
+        coordinator.pool_device_id = pool_device.id
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 
