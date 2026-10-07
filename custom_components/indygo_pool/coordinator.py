@@ -39,6 +39,9 @@ class IndygoPoolDataUpdateCoordinator(DataUpdateCoordinator[IndygoPoolData]):
         """Initialize."""
         self.client = client
         self.config_entry = entry
+        # Boost speed picked per variable-speed module. The API keeps no such
+        # setting: the speed travels with each boost command.
+        self.boost_speeds: dict[str, int] = {}
         super().__init__(
             hass,
             LOGGER,

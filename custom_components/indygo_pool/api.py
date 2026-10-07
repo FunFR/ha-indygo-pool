@@ -503,11 +503,18 @@ class IndygoPoolApiClient:
     # Manual commands  (filtration boost)
     # ------------------------------------------------------------------
 
-    async def async_start_boost(self, hours: int) -> None:
-        """Run the filtration for ``hours`` regardless of its program."""
-        await self._send_filtration_command(
-            {"time": f"{hours:02d}:00", "action": MANUAL_ACTION_BOOST}
-        )
+    async def async_start_boost(self, hours: int, speed: int | None = None) -> None:
+        """Run the filtration for ``hours`` regardless of its program.
+
+        ``speed`` only applies to variable-speed pumps.
+        """
+        command: dict[str, Any] = {
+            "time": f"{hours:02d}:00",
+            "action": MANUAL_ACTION_BOOST,
+        }
+        if speed is not None:
+            command["speed"] = speed
+        await self._send_filtration_command(command)
 
     async def async_stop_boost(self) -> None:
         """Stop a running filtration boost."""

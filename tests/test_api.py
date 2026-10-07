@@ -489,6 +489,17 @@ async def test_start_boost():
 
 
 @pytest.mark.asyncio
+async def test_start_boost_at_speed():
+    """Variable-speed pumps get the boost speed, like the app."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    payload = await _send_boost_command("async_start_boost", 2, 3)
+
+    assert payload == {"pool": {"index": 0, "time": "02:00", "action": 3, "speed": 3}}
+
+
+@pytest.mark.asyncio
 async def test_start_boost_beyond_a_day():
     """Durations over 24 h keep the HH:MM shape, like the app."""
     if aioresponses is None:

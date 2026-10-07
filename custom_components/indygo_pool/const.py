@@ -46,5 +46,8 @@ PROGRAM_RULE_SCHEDULE = 0
 PROGRAM_RULE_THERMO_ADAPTIVE = 1
 PROGRAM_RULE_VARIABLE_SPEED = 2
 
+# Speed the MyIndygo app boosts variable-speed pumps at by default.
+BOOST_DEFAULT_SPEED = 2
+
 # Live speed reported by variable-speed pumps in pool[0].value.
 PUMP_SPEED_STATES = {0: "stopped", 1: "speed_1", 2: "speed_2", 3: "speed_3"}

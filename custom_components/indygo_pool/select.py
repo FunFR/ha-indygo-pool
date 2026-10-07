@@ -7,8 +7,10 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_call_later
+from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import (
+    BOOST_DEFAULT_SPEED,
     DOMAIN,
     LOGGER,
     ON_SPEED_FIELD,
@@ -59,7 +61,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up the select platform."""
     coordinator: IndygoPoolDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
-    entities: list[IndygoPoolCommandSelect] = []
+    entities: list[SelectEntity] = []
 
     if not coordinator.data:
         return
@@ -76,6 +78,9 @@ async def async_setup_entry(
             entity_classes.append(IndygoPoolManagementSelect)
         if module.has_variable_speed:
             entity_classes.append(IndygoPoolSpeedSelect)
+            entities.append(
+                IndygoPoolBoostSpeedSelect(coordinator, module_id, module.name)
+            )
         entities.extend(
             entity_class(coordinator, module_id, module.name)
             for entity_class in entity_classes
@@ -251,7 +256,12 @@ class IndygoPoolBoostSelect(IndygoPoolCommandSelect):
     ) -> bool:
         """Start a boost of ``value`` hours, or stop it when 0."""
         if value:
-            await self.coordinator.client.async_start_boost(value)
+            speed = (
+                self.coordinator.boost_speeds.get(module.id, BOOST_DEFAULT_SPEED)
+                if module.has_variable_speed
+                else None
+            )
+            await self.coordinator.client.async_start_boost(value, speed)
         else:
             await self.coordinator.client.async_stop_boost()
         self._picked_option = option
@@ -306,3 +316,50 @@ class IndygoPoolManagementSelect(IndygoPoolProgramSelect):
             }
         )
         super().__init__(coordinator, module_id, module_name)
+
+
+class IndygoPoolBoostSpeedSelect(IndygoPoolEntity, SelectEntity, RestoreEntity):
+    """Speed the next boost of a variable-speed pump runs at.
+
+    Nothing is sent when it changes: the boost select reads it when it
+    starts a boost. Restored across restarts since the API does not keep it.
+    """
+
+    _attr_options = list(SPEED_TO_INT)
+    _attr_translation_key = "boost_speed"
+    _attr_icon = "mdi:speedometer"
+
+    def __init__(
+        self,
+        coordinator: IndygoPoolDataUpdateCoordinator,
+        module_id: str,
+        module_name: str,
+    ) -> None:
+        """Initialize."""
+        super().__init__(coordinator, module_id)
+        self._attr_unique_id = self._build_unique_id("boost_speed")
+        self.entity_id = f"select.{self.device_name_slug}_boost_speed"
+
+    @property
+    def current_option(self) -> str | None:
+        """Return the picked boost speed."""
+        speed = self.coordinator.boost_speeds.get(
+            self._module_id or "", BOOST_DEFAULT_SPEED
+        )
+        return PUMP_SPEED_STATES.get(speed)
+
+    async def async_added_to_hass(self) -> None:
+        """Restore the speed picked before the restart."""
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state and last_state.state in SPEED_TO_INT:
+            self._set_speed(last_state.state)
+
+    async def async_select_option(self, option: str) -> None:
+        """Remember the speed for the next boost."""
+        self._set_speed(option)
+        self.async_write_ha_state()
+
+    def _set_speed(self, option: str) -> None:
+        if self._module_id:
+            self.coordinator.boost_speeds[self._module_id] = SPEED_TO_INT[option]

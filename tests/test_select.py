@@ -18,6 +18,7 @@ from custom_components.indygo_pool.select import (
     MODE_OFF,
     MODE_ON,
     IndygoPoolBoostSelect,
+    IndygoPoolBoostSpeedSelect,
     IndygoPoolFiltrationModeSelect,
     IndygoPoolManagementSelect,
     IndygoPoolSpeedSelect,
@@ -34,6 +35,7 @@ def mock_coordinator():
     coordinator.data.modules = {}
     coordinator.client = AsyncMock()
     coordinator.async_request_refresh = AsyncMock()
+    coordinator.boost_speeds = {}
     # Mock config_entry for unique_id fallback
     coordinator.config_entry = MagicMock()
     coordinator.config_entry.entry_id = "test_entry_id"
@@ -436,7 +438,9 @@ class TestVariableSpeedSelects:
 
         entities = async_add_entities.call_args[0][0]
         assert sorted(
-            e.unique_id for e in entities if not isinstance(e, IndygoPoolBoostSelect)
+            e.unique_id
+            for e in entities
+            if not isinstance(e, IndygoPoolBoostSelect | IndygoPoolBoostSpeedSelect)
         ) == [
             "test_pool_id_old_filtration_mode",
             "test_pool_id_pc_filtration_management",
@@ -496,7 +500,7 @@ class TestBoostSelect:
         with patch("custom_components.indygo_pool.select.async_call_later"):
             await entity.async_select_option("36h")
 
-        boost_coordinator.client.async_start_boost.assert_awaited_once_with(36)
+        boost_coordinator.client.async_start_boost.assert_awaited_once_with(36, None)
         boost_coordinator.async_request_refresh.assert_awaited_once()
 
     @pytest.mark.asyncio
@@ -534,3 +538,79 @@ class TestBoostSelect:
 
         unique_ids = {e.unique_id for e in async_add_entities.call_args[0][0]}
         assert "test_pool_id_mod1_filtration_boost" in unique_ids
+
+
+class TestBoostSpeed:
+    """Boost speed of variable-speed pumps."""
+
+    @pytest.fixture
+    def vs_boost_coordinator(self, boost_coordinator):
+        """Turn the boost fixture module into a variable-speed pump."""
+        boost_coordinator.data.modules["mod1"].type = "lr-pc-vs2"
+        return boost_coordinator
+
+    def test_defaults_to_the_app_default(self, vs_boost_coordinator):
+        """The app boosts at V2 unless told otherwise."""
+        entity = IndygoPoolBoostSpeedSelect(vs_boost_coordinator, "mod1", "Pump")
+
+        assert entity.options == ["speed_1", "speed_2", "speed_3"]
+        assert entity.current_option == "speed_2"
+        assert entity.unique_id == "test_pool_id_mod1_boost_speed"
+
+    @pytest.mark.asyncio
+    async def test_boost_runs_at_the_picked_speed(self, vs_boost_coordinator):
+        """The boost select sends the speed picked on the speed select."""
+        speed = IndygoPoolBoostSpeedSelect(vs_boost_coordinator, "mod1", "Pump")
+        speed.async_write_ha_state = MagicMock()
+        boost = IndygoPoolBoostSelect(vs_boost_coordinator, "mod1", "Pump")
+
+        await speed.async_select_option("speed_3")
+        with patch("custom_components.indygo_pool.select.async_call_later"):
+            await boost.async_select_option("2h")
+
+        assert speed.current_option == "speed_3"
+        vs_boost_coordinator.client.async_start_boost.assert_awaited_once_with(2, 3)
+
+    @pytest.mark.asyncio
+    async def test_boost_defaults_to_v2_on_vs(self, vs_boost_coordinator):
+        """Without a pick, a variable-speed boost runs at V2 like the app."""
+        boost = IndygoPoolBoostSelect(vs_boost_coordinator, "mod1", "Pump")
+
+        with patch("custom_components.indygo_pool.select.async_call_later"):
+            await boost.async_select_option("2h")
+
+        vs_boost_coordinator.client.async_start_boost.assert_awaited_once_with(2, 2)
+
+    @pytest.mark.asyncio
+    async def test_restores_last_speed(self, vs_boost_coordinator):
+        """The picked speed survives a Home Assistant restart."""
+        entity = IndygoPoolBoostSpeedSelect(vs_boost_coordinator, "mod1", "Pump")
+        entity.hass = MagicMock()
+        last = MagicMock(state="speed_1")
+
+        with patch.object(entity, "async_get_last_state", AsyncMock(return_value=last)):
+            await entity.async_added_to_hass()
+
+        assert vs_boost_coordinator.boost_speeds == {"mod1": 1}
+        assert entity.current_option == "speed_1"
+
+    @pytest.mark.asyncio
+    async def test_setup_adds_boost_speed_only_on_vs(self, vs_boost_coordinator):
+        """Single-speed pumps have no boost speed."""
+        hass = MagicMock(spec=HomeAssistant)
+        entry = MagicMock(spec=ConfigEntry)
+        entry.entry_id = "test_entry_id"
+        hass.data = {"indygo_pool": {"test_entry_id": vs_boost_coordinator}}
+        vs_boost_coordinator.data.modules["pc"] = IndygoModuleData(
+            id="pc",
+            type="lr-pc",
+            name="PC",
+            filtration_program={"programCharacteristics": {"mode": 2}},
+        )
+        async_add_entities = MagicMock()
+
+        await async_setup_entry(hass, entry, async_add_entities)
+
+        unique_ids = {e.unique_id for e in async_add_entities.call_args[0][0]}
+        assert "test_pool_id_mod1_boost_speed" in unique_ids
+        assert "test_pool_id_pc_boost_speed" not in unique_ids

@@ -164,6 +164,14 @@
                     "48h": "48 h",
                     "72h": "72 h"
                 }
+            },
+            "boost_speed": {
+                "name": "Vitesse boost",
+                "state": {
+                    "speed_1": "V1",
+                    "speed_2": "V2",
+                    "speed_3": "V3"
+                }
             }
         },
         "switch": {
