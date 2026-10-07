@@ -646,3 +646,13 @@ async def test_boost_without_filtration_line_sends_nothing(boost_coordinator):
     await entity.async_select_option("2h")
 
     boost_coordinator.client.async_start_boost.assert_not_called()
+
+
+def test_boost_unknown_without_data(boost_coordinator):
+    """No coordinator data or no boost state leaves the boost unknown."""
+    entity = IndygoPoolBoostSelect(boost_coordinator, "mod1", "Pump")
+    del boost_coordinator.data.modules["mod1"].sensors["pump_boost"]
+    assert entity.current_option is None
+
+    boost_coordinator.data = None
+    assert entity.current_option is None
