@@ -272,3 +272,27 @@ def test_filtration_runs_at_any_variable_speed(mock_coordinator, speed, expected
     entity = IndygoPoolBinarySensor(mock_coordinator, desc, module_id="mod1")
 
     assert entity.is_on is expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("boosting", [True, False])
+async def test_pump_boost(mock_coordinator, boosting):
+    """Variable-speed pumps expose whether a boost is running."""
+    mock_hass = MagicMock()
+    mock_entry = MagicMock()
+    mock_hass.data = {"indygo_pool": {mock_entry.entry_id: mock_coordinator}}
+    mock_coordinator.data.modules = {
+        "vs": IndygoModuleData(
+            id="vs",
+            name="Pump",
+            type="lr-pc-vs2",
+            sensors={"pump_boost": IndygoSensorData(key="pump_boost", value=boosting)},
+        )
+    }
+    async_add_entities = MagicMock()
+
+    await async_setup_entry(mock_hass, mock_entry, async_add_entities)
+
+    (entity,) = async_add_entities.call_args[0][0]
+    assert entity.unique_id == "test_pool_id_vs_pump_boost"
+    assert entity.is_on is boosting

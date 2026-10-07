@@ -6,7 +6,11 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from .const import PROGRAM_TYPE_FILTRATION
+from .const import (
+    PROGRAM_TYPE_FILTRATION,
+    PUMP_SPEED_STATES,
+    VARIABLE_SPEED_FIELD,
+)
 from .models import IndygoModuleData, IndygoPoolData, IndygoSensorData
 
 _LOGGER = logging.getLogger(__name__)
@@ -314,6 +318,30 @@ class IndygoParser:
                         key="filtration_remaining_time",
                         value=remaining_minutes,
                     )
+
+            if idx == 0 and filt_module:
+                self._parse_variable_speed_status(filt_module, item)
+
+    @staticmethod
+    def _parse_variable_speed_status(module: IndygoModuleData, item: dict) -> None:
+        """Expose the live speed and boost of a variable-speed pump.
+
+        Their pool[0].value is the running speed instead of an on/off flag,
+        and a boost only shows up here (info gains "boost"), not in programs.
+        """
+        characteristics = (module.filtration_program or {}).get(
+            "programCharacteristics", {}
+        )
+        if VARIABLE_SPEED_FIELD not in characteristics:
+            return
+        speed = item.get("value")
+        module.sensors["pump_speed"] = IndygoSensorData(
+            key="pump_speed",
+            value=PUMP_SPEED_STATES.get(speed) if isinstance(speed, int) else None,
+        )
+        module.sensors["pump_boost"] = IndygoSensorData(
+            key="pump_boost", value="boost" in (item.get("info") or [])
+        )
 
     def _parse_root_sensors(
         self,

@@ -405,21 +405,23 @@ class IndygoPoolApiClient:
         target_index = target.get("index")
         return target_index is not None and program.get("index") == target_index
 
-    async def async_set_filtration_mode(
-        self, module_id: str, full_program_data: dict, mode: int
-    ) -> None:
-        """Set the filtration mode (Auto/Off/On) safely."""
-        await self.async_set_program_mode(module_id, full_program_data, mode)
-
     async def async_set_program_mode(
         self, module_id: str, full_program_data: dict, mode: int
     ) -> None:
-        """Set the mode (Off/On/Auto) of a single module program.
+        """Set the mode (Off/On/Auto) of a single module program."""
+        await self.async_update_program_characteristics(
+            module_id, full_program_data, mode=mode
+        )
+
+    async def async_update_program_characteristics(
+        self, module_id: str, full_program_data: dict, **changes: Any
+    ) -> None:
+        """Update fields of a single program's programCharacteristics.
 
         Sends the FULL program list back (like the vendor apps) to avoid
         corrupting the device configuration.  Only the targeted program has
-        its mode changed: every other program is sent back carrying its own
-        current mode, which is what the vendor apps do.
+        its characteristics changed: every other program is sent back as is,
+        which is what the vendor apps do.
         """
         program_copy = copy.deepcopy(full_program_data)
 
@@ -427,7 +429,7 @@ class IndygoPoolApiClient:
             raise IndygoPoolApiClientError(
                 "Invalid program data: missing programCharacteristics"
             )
-        program_copy["programCharacteristics"]["mode"] = mode
+        program_copy["programCharacteristics"].update(changes)
         program_copy["dataChanged"] = True
 
         # Collect all programs for this module
@@ -451,8 +453,8 @@ class IndygoPoolApiClient:
             updated_programs.append(program_copy)
 
         LOGGER.debug(
-            "Setting mode %s on program %s of module %s. Sending %d programs.",
-            mode,
+            "Setting %s on program %s of module %s. Sending %d programs.",
+            changes,
             program_copy.get("id") or program_copy.get("index"),
             module_id,
             len(updated_programs),
@@ -490,7 +492,7 @@ class IndygoPoolApiClient:
                 )
 
         except IndygoPoolApiClientError as exc:
-            LOGGER.error("Failed to set program mode: %s", exc)
+            LOGGER.error("Failed to update program: %s", exc)
             raise
 
     # ------------------------------------------------------------------

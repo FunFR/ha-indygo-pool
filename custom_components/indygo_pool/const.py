@@ -30,3 +30,11 @@ PROGRAM_TYPE_LIGHTING = 2
 PROGRAM_MODE_OFF = 0
 PROGRAM_MODE_ON = 1
 PROGRAM_MODE_AUTO = 2
+
+# Only variable-speed pump (LR-PC-VS*) filtration programs carry a speed.
+# Confirmed on LR-PC-VS2 (#284): the vendor app writes defaultProgramSpeed and
+# onSpeed together (1-3), and rule holds the management type.
+VARIABLE_SPEED_FIELD = "defaultProgramSpeed"
+
+# Live speed reported by variable-speed pumps in pool[0].value.
+PUMP_SPEED_STATES = {0: "stopped", 1: "speed_1", 2: "speed_2", 3: "speed_3"}

@@ -82,6 +82,15 @@
             },
             "filtration_remaining_time": {
                 "name": "Filtration remaining time"
+            },
+            "pump_speed": {
+                "name": "Pump speed",
+                "state": {
+                    "stopped": "Stopped",
+                    "speed_1": "V1",
+                    "speed_2": "V2",
+                    "speed_3": "V3"
+                }
             }
         },
         "binary_sensor": {
@@ -117,11 +126,30 @@
             },
             "filtration": {
                 "name": "Filtration"
+            },
+            "pump_boost": {
+                "name": "Pump boost"
             }
         },
         "select": {
             "filtration_mode": {
                 "name": "Filtration mode"
+            },
+            "filtration_speed": {
+                "name": "Filtration speed",
+                "state": {
+                    "speed_1": "V1",
+                    "speed_2": "V2",
+                    "speed_3": "V3"
+                }
+            },
+            "filtration_management": {
+                "name": "Filtration management",
+                "state": {
+                    "schedule": "Schedule",
+                    "thermo_adaptive": "Thermo-adaptive",
+                    "variable_speed": "Variable speed"
+                }
             }
         },
         "switch": {

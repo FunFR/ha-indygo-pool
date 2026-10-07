@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from homeassistant.components.sensor import SensorDeviceClass
 
 from custom_components.indygo_pool.coordinator import IndygoPoolDataUpdateCoordinator
 from custom_components.indygo_pool.models import (
@@ -231,3 +232,27 @@ def test_sensor_value_coordinator_no_data(mock_coordinator):
     mock_coordinator.data = None
     assert entity.native_value is None
     assert entity.extra_state_attributes is None
+
+
+@pytest.mark.asyncio
+async def test_pump_speed_is_an_enum_sensor(mock_coordinator):
+    """The live speed of a variable-speed pump is a translated enum."""
+    mock_hass = MagicMock()
+    mock_entry = MagicMock()
+    mock_hass.data = {"indygo_pool": {mock_entry.entry_id: mock_coordinator}}
+    mock_coordinator.data.modules = {
+        "vs": IndygoModuleData(
+            id="vs",
+            type="lr-pc-vs2",
+            name="Pump",
+            sensors={"pump_speed": IndygoSensorData(key="pump_speed", value="speed_3")},
+        )
+    }
+    async_add_entities = MagicMock()
+
+    await async_setup_entry(mock_hass, mock_entry, async_add_entities)
+
+    (entity,) = async_add_entities.call_args[0][0]
+    assert entity.device_class == SensorDeviceClass.ENUM
+    assert entity.options == ["stopped", "speed_1", "speed_2", "speed_3"]
+    assert entity.native_value == "speed_3"

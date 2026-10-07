@@ -13,7 +13,9 @@ from custom_components.indygo_pool.select import (
     MODE_AUTO,
     MODE_OFF,
     MODE_ON,
+    IndygoPoolManagementSelect,
     IndygoPoolSelect,
+    IndygoPoolSpeedSelect,
     async_setup_entry,
 )
 
@@ -123,8 +125,8 @@ class TestIndygoPoolSelect:
             await entity.async_select_option(MODE_AUTO)
 
         # Verify API called with correct args (mode 2 for Auto)
-        mock_coordinator.client.async_set_filtration_mode.assert_called_once_with(
-            module_id, filtration_program, 2
+        mock_coordinator.client.async_update_program_characteristics.assert_called_once_with(
+            module_id, filtration_program, mode=2
         )
         # Verify immediate refresh requested
         mock_coordinator.async_request_refresh.assert_called_once()
@@ -249,7 +251,7 @@ class TestIndygoPoolSelect:
 
         await entity.async_select_option("InvalidMode")
 
-        mock_coordinator.client.async_set_filtration_mode.assert_not_called()
+        mock_coordinator.client.async_update_program_characteristics.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_select_option_missing_module(self, mock_coordinator):
@@ -258,7 +260,7 @@ class TestIndygoPoolSelect:
         mock_coordinator.data.modules = {}
 
         await entity.async_select_option(MODE_AUTO)
-        mock_coordinator.client.async_set_filtration_mode.assert_not_called()
+        mock_coordinator.client.async_update_program_characteristics.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_select_option_no_filtration(self, mock_coordinator):
@@ -271,7 +273,7 @@ class TestIndygoPoolSelect:
         }
 
         await entity.async_select_option(MODE_AUTO)
-        mock_coordinator.client.async_set_filtration_mode.assert_not_called()
+        mock_coordinator.client.async_update_program_characteristics.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_async_setup_entry_with_data(self, mock_coordinator):
@@ -317,3 +319,102 @@ class TestIndygoPoolSelect:
         await async_setup_entry(hass, entry, async_add_entities)
 
         async_add_entities.assert_not_called()
+
+
+VS_PROGRAM = {
+    "id": "prog_vs",
+    "programCharacteristics": {
+        "mode": 2,
+        "programType": 4,
+        "rule": 1,
+        "defaultProgramSpeed": 2,
+        "onSpeed": 2,
+    },
+}
+
+
+@pytest.fixture
+def vs_coordinator(mock_coordinator):
+    """Coordinator holding a variable-speed pump module."""
+    mock_coordinator.data.modules = {
+        "mod1": IndygoModuleData(
+            id="mod1",
+            type="lr-pc-vs2",
+            name="Pump",
+            filtration_program=VS_PROGRAM,
+        )
+    }
+    return mock_coordinator
+
+
+class TestVariableSpeedSelects:
+    """Speed and management type selects of variable-speed pumps."""
+
+    def test_speed_reflects_program(self, vs_coordinator):
+        """The speed select shows the configured program speed."""
+        entity = IndygoPoolSpeedSelect(vs_coordinator, "mod1", "Pump")
+
+        assert entity.options == ["speed_1", "speed_2", "speed_3"]
+        assert entity.current_option == "speed_2"
+        assert entity.unique_id == "test_pool_id_mod1_filtration_speed"
+
+    @pytest.mark.asyncio
+    async def test_speed_writes_both_speed_fields(self, vs_coordinator):
+        """Like the vendor app, both speed fields are written together."""
+        entity = IndygoPoolSpeedSelect(vs_coordinator, "mod1", "Pump")
+
+        with patch("custom_components.indygo_pool.select.async_call_later"):
+            await entity.async_select_option("speed_3")
+
+        vs_coordinator.client.async_update_program_characteristics.assert_awaited_once_with(
+            "mod1", VS_PROGRAM, defaultProgramSpeed=3, onSpeed=3
+        )
+
+    def test_management_reflects_rule(self, vs_coordinator):
+        """The management select maps rule 1 to thermo-adaptive."""
+        entity = IndygoPoolManagementSelect(vs_coordinator, "mod1", "Pump")
+
+        assert entity.options == ["schedule", "thermo_adaptive", "variable_speed"]
+        assert entity.current_option == "thermo_adaptive"
+
+    @pytest.mark.asyncio
+    async def test_management_writes_rule_only(self, vs_coordinator):
+        """Changing the management type only patches the rule."""
+        entity = IndygoPoolManagementSelect(vs_coordinator, "mod1", "Pump")
+
+        with patch("custom_components.indygo_pool.select.async_call_later"):
+            await entity.async_select_option("schedule")
+
+        vs_coordinator.client.async_update_program_characteristics.assert_awaited_once_with(
+            "mod1", VS_PROGRAM, rule=0
+        )
+
+    @pytest.mark.asyncio
+    async def test_setup_adds_vs_selects_only_for_vs_programs(self, mock_coordinator):
+        """Single-speed pumps keep only the mode select."""
+        hass = MagicMock(spec=HomeAssistant)
+        entry = MagicMock(spec=ConfigEntry)
+        entry.entry_id = "test_entry_id"
+        hass.data = {"indygo_pool": {"test_entry_id": mock_coordinator}}
+        mock_coordinator.data.modules = {
+            "vs": IndygoModuleData(
+                id="vs", type="lr-pc-vs2", name="VS", filtration_program=VS_PROGRAM
+            ),
+            "pc": IndygoModuleData(
+                id="pc",
+                type="lr-pc",
+                name="PC",
+                filtration_program={"programCharacteristics": {"mode": 2}},
+            ),
+        }
+        async_add_entities = MagicMock()
+
+        await async_setup_entry(hass, entry, async_add_entities)
+
+        entities = async_add_entities.call_args[0][0]
+        assert sorted((type(e).__name__, e._module_id) for e in entities) == [
+            ("IndygoPoolManagementSelect", "vs"),
+            ("IndygoPoolSelect", "pc"),
+            ("IndygoPoolSelect", "vs"),
+            ("IndygoPoolSpeedSelect", "vs"),
+        ]

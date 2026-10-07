@@ -8,7 +8,7 @@ from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_call_later
 
-from .const import DOMAIN, LOGGER
+from .const import DOMAIN, LOGGER, PUMP_SPEED_STATES, VARIABLE_SPEED_FIELD
 from .coordinator import IndygoPoolDataUpdateCoordinator
 from .entity import IndygoPoolEntity
 from .models import IndygoModuleData
@@ -29,7 +29,15 @@ MODE_TO_INT = {
     MODE_AUTO: 2,
 }
 
-INT_TO_MODE = {v: k for k, v in MODE_TO_INT.items()}
+# programCharacteristics.defaultProgramSpeed / onSpeed of variable-speed pumps.
+SPEED_TO_INT = {state: speed for speed, state in PUMP_SPEED_STATES.items() if speed}
+
+# programCharacteristics.rule of variable-speed pumps.
+MANAGEMENT_TO_INT = {
+    "schedule": 0,
+    "thermo_adaptive": 1,
+    "variable_speed": 2,
+}
 
 
 async def async_setup_entry(
@@ -39,29 +47,33 @@ async def async_setup_entry(
 ) -> None:
     """Set up the select platform."""
     coordinator: IndygoPoolDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
-    entities: list[IndygoPoolSelect] = []
+    entities: list[IndygoPoolProgramSelect] = []
 
     if not coordinator.data:
         return
 
-    # Check modules for filtration program
     for module_id, module in coordinator.data.modules.items():
-        if module.filtration_program:
-            entities.append(
-                IndygoPoolSelect(
-                    coordinator=coordinator,
-                    module_id=module_id,
-                    module_name=module.name,
-                )
-            )
+        program = module.filtration_program
+        if not program:
+            continue
+        entity_classes: list[type[IndygoPoolProgramSelect]] = [IndygoPoolSelect]
+        if VARIABLE_SPEED_FIELD in program.get("programCharacteristics", {}):
+            entity_classes += [IndygoPoolSpeedSelect, IndygoPoolManagementSelect]
+        entities.extend(
+            entity_class(coordinator, module_id, module.name)
+            for entity_class in entity_classes
+        )
 
     async_add_entities(entities)
 
 
-class IndygoPoolSelect(IndygoPoolEntity, SelectEntity):
-    """Indygo Pool Filtration Mode Select class."""
+class IndygoPoolProgramSelect(IndygoPoolEntity, SelectEntity):
+    """Select writing fields of the filtration program characteristics."""
 
-    _attr_options = [MODE_OFF, MODE_ON, MODE_AUTO]
+    _key: str
+    _option_to_int: dict[str, int]
+    # Characteristics written with the selected value; the first one is read.
+    _fields: tuple[str, ...]
     _attr_icon = "mdi:pump"
 
     def __init__(
@@ -72,9 +84,10 @@ class IndygoPoolSelect(IndygoPoolEntity, SelectEntity):
     ) -> None:
         """Initialize."""
         super().__init__(coordinator, module_id)
-        self._attr_translation_key = "filtration_mode"
-        self._attr_unique_id = self._build_unique_id("filtration_mode")
-        self.entity_id = f"select.{self.device_name_slug}_filtration_mode"
+        self._attr_options = list(self._option_to_int)
+        self._attr_translation_key = self._key
+        self._attr_unique_id = self._build_unique_id(self._key)
+        self.entity_id = f"select.{self.device_name_slug}_{self._key}"
         self._cancel_delayed_refresh: CALLBACK_TYPE | None = None
 
     @property
@@ -88,33 +101,40 @@ class IndygoPoolSelect(IndygoPoolEntity, SelectEntity):
         if not module.filtration_program:
             return None
 
-        mode = module.filtration_program.get("programCharacteristics", {}).get("mode")
-
-        return INT_TO_MODE.get(mode)
+        value = module.filtration_program.get("programCharacteristics", {}).get(
+            self._fields[0]
+        )
+        return next(
+            (opt for opt, val in self._option_to_int.items() if val == value), None
+        )
 
     async def async_select_option(self, option: str) -> None:
         """Change the selected option."""
         data = self.coordinator.data
         if not data or self._module_id not in data.modules:
-            LOGGER.error("Cannot set mode: Module %s not found", self._module_id)
+            LOGGER.error(
+                "Cannot set %s: Module %s not found", self._key, self._module_id
+            )
             return
 
         module: IndygoModuleData = data.modules[self._module_id]
         if not module.filtration_program:
             LOGGER.error(
-                "Cannot set mode: Filtration program not found for module %s",
+                "Cannot set %s: Filtration program not found for module %s",
+                self._key,
                 self._module_id,
             )
             return
 
-        mode_int = MODE_TO_INT.get(option)
-        if mode_int is None:
+        value = self._option_to_int.get(option)
+        if value is None:
             LOGGER.error("Invalid option selected: %s", option)
             return
 
-        # Perform the update
-        await self.coordinator.client.async_set_filtration_mode(
-            self._module_id, module.filtration_program, mode_int
+        await self.coordinator.client.async_update_program_characteristics(
+            self._module_id,
+            module.filtration_program,
+            **dict.fromkeys(self._fields, value),
         )
 
         # Trigger immediate refresh
@@ -156,3 +176,32 @@ class IndygoPoolSelect(IndygoPoolEntity, SelectEntity):
             self._cancel_delayed_refresh()
             self._cancel_delayed_refresh = None
         await super().async_will_remove_from_hass()
+
+
+class IndygoPoolSelect(IndygoPoolProgramSelect):
+    """Filtration mode (Off/On/Auto)."""
+
+    _key = "filtration_mode"
+    _option_to_int = MODE_TO_INT
+    _fields = ("mode",)
+
+
+class IndygoPoolSpeedSelect(IndygoPoolProgramSelect):
+    """Configured speed of a variable-speed pump.
+
+    The vendor app always writes both speed fields together, so does this.
+    """
+
+    _key = "filtration_speed"
+    _option_to_int = SPEED_TO_INT
+    _fields = (VARIABLE_SPEED_FIELD, "onSpeed")
+    _attr_icon = "mdi:speedometer"
+
+
+class IndygoPoolManagementSelect(IndygoPoolProgramSelect):
+    """Management type (rule) of a variable-speed pump."""
+
+    _key = "filtration_management"
+    _option_to_int = MANAGEMENT_TO_INT
+    _fields = ("rule",)
+    _attr_icon = "mdi:calendar-clock"

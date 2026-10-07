@@ -947,3 +947,92 @@ class TestPoolCircuits:
         )
 
         assert set(pool_data.modules["MOD1"].pool_status) == {"1"}
+
+
+class TestVariableSpeedPump:
+    """Live state of an LR-PC-VS2 variable-speed pump.
+
+    Payloads reduced from diagnostics shared in issue #284: thermo-adaptive at
+    V2, then a 2 h boost at V3.
+    """
+
+    PROGRAM_CHARACTERISTICS = {
+        "programType": FILTRATION_PROGRAM_TYPE,
+        "mode": 2,
+        "rule": 1,
+        "defaultProgramSpeed": 2,
+        "onSpeed": 2,
+        "frostFreeSpeed": 1,
+        "speedSequence": 38192,
+    }
+    RUNNING_V2 = {
+        "index": 0,
+        "time": "06:54",
+        "tempRef": 9,
+        "value": 2,
+        "info": ["pgm"],
+    }
+    BOOST_V3 = {
+        "index": 0,
+        "origin": 3,
+        "time": "02:00",
+        "value": 3,
+        "info": ["pgm", "boost"],
+    }
+
+    def _parse(self, pool_entry: dict, characteristics: dict | None = None):
+        json_data = {
+            "modules": [
+                {
+                    "id": "VS2",
+                    "type": "lr-pc-vs2",
+                    "name": "LRPCVS2",
+                    "programs": [
+                        {
+                            "index": 0,
+                            "programCharacteristics": characteristics
+                            or self.PROGRAM_CHARACTERISTICS,
+                        }
+                    ],
+                }
+            ],
+            "pool": [pool_entry],
+        }
+        return IndygoParser().parse_data(json_data, "P1", "A1", "R1").modules["VS2"]
+
+    def test_running_speed(self):
+        """The status value is exposed as the current pump speed."""
+        module = self._parse(self.RUNNING_V2)
+
+        assert module.sensors["pump_speed"].value == "speed_2"
+        assert module.sensors["pump_boost"].value is False
+
+    def test_boost(self):
+        """A boost shows up in the live status only, at its own speed."""
+        module = self._parse(self.BOOST_V3)
+
+        assert module.sensors["pump_speed"].value == "speed_3"
+        assert module.sensors["pump_boost"].value is True
+        assert module.sensors["filtration_remaining_time"].value == 120  # noqa: PLR2004
+
+    def test_stopped(self):
+        """Value 0 reports the pump as stopped."""
+        module = self._parse({"index": 0, "value": 0, "info": []})
+
+        assert module.sensors["pump_speed"].value == "stopped"
+
+    def test_unknown_value(self):
+        """An unexpected value leaves the speed unknown instead of failing."""
+        module = self._parse({"index": 0, "value": 7, "info": []})
+
+        assert module.sensors["pump_speed"].value is None
+
+    def test_single_speed_pump_has_no_speed_sensors(self):
+        """Programs without a speed belong to single-speed pumps."""
+        module = self._parse(
+            {"index": 0, "value": 1, "info": ["pgm"]},
+            {"programType": FILTRATION_PROGRAM_TYPE, "mode": 2},
+        )
+
+        assert "pump_speed" not in module.sensors
+        assert "pump_boost" not in module.sensors
