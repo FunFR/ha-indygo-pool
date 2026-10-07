@@ -35,6 +35,13 @@ PROGRAM_MODE_AUTO = 2
 # Confirmed on LR-PC-VS2 (#284): the vendor app writes defaultProgramSpeed and
 # onSpeed together (1-3), and rule holds the management type.
 VARIABLE_SPEED_FIELD = "defaultProgramSpeed"
+ON_SPEED_FIELD = "onSpeed"
+RULE_FIELD = "rule"
+
+# programCharacteristics.rule values (management type).
+PROGRAM_RULE_SCHEDULE = 0
+PROGRAM_RULE_THERMO_ADAPTIVE = 1
+PROGRAM_RULE_VARIABLE_SPEED = 2
 
 # Live speed reported by variable-speed pumps in pool[0].value.
 PUMP_SPEED_STATES = {0: "stopped", 1: "speed_1", 2: "speed_2", 3: "speed_3"}

@@ -13,8 +13,8 @@ from custom_components.indygo_pool.select import (
     MODE_AUTO,
     MODE_OFF,
     MODE_ON,
+    IndygoPoolFiltrationModeSelect,
     IndygoPoolManagementSelect,
-    IndygoPoolSelect,
     IndygoPoolSpeedSelect,
     async_setup_entry,
 )
@@ -37,14 +37,16 @@ def mock_coordinator():
 
 
 class TestIndygoPoolSelect:
-    """Test the IndygoPoolSelect entity."""
+    """Test the IndygoPoolFiltrationModeSelect entity."""
 
     def test_init(self, mock_coordinator):
         """Test initialization of the select entity."""
         module_id = "mod1"
         module_name = "Pool Pump"
 
-        entity = IndygoPoolSelect(mock_coordinator, module_id, module_name)
+        entity = IndygoPoolFiltrationModeSelect(
+            mock_coordinator, module_id, module_name
+        )
         entity.platform = MagicMock()
         entity.platform.platform_name = "indygo_pool"
         entity.platform.domain = "select"
@@ -68,7 +70,7 @@ class TestIndygoPoolSelect:
             )
         }
 
-        entity = IndygoPoolSelect(mock_coordinator, module_id, "Pump")
+        entity = IndygoPoolFiltrationModeSelect(mock_coordinator, module_id, "Pump")
         assert entity.current_option == MODE_OFF
 
     def test_current_option_auto(self, mock_coordinator):
@@ -85,7 +87,7 @@ class TestIndygoPoolSelect:
             )
         }
 
-        entity = IndygoPoolSelect(mock_coordinator, module_id, "Pump")
+        entity = IndygoPoolFiltrationModeSelect(mock_coordinator, module_id, "Pump")
         assert entity.current_option == MODE_AUTO
 
     def test_current_option_none(self, mock_coordinator):
@@ -93,7 +95,7 @@ class TestIndygoPoolSelect:
         module_id = "mod1"
         # Case 1: Module not in data
         mock_coordinator.data.modules = {}
-        entity = IndygoPoolSelect(mock_coordinator, module_id, "Pump")
+        entity = IndygoPoolFiltrationModeSelect(mock_coordinator, module_id, "Pump")
         assert entity.current_option is None
 
         # Case 2: No filtration program
@@ -117,7 +119,7 @@ class TestIndygoPoolSelect:
         )
         mock_coordinator.data.modules = {module_id: module_data}
 
-        entity = IndygoPoolSelect(mock_coordinator, module_id, "Pump")
+        entity = IndygoPoolFiltrationModeSelect(mock_coordinator, module_id, "Pump")
 
         with patch(
             "custom_components.indygo_pool.select.async_call_later"
@@ -149,7 +151,7 @@ class TestIndygoPoolSelect:
             )
         }
 
-        entity = IndygoPoolSelect(mock_coordinator, module_id, "Pump")
+        entity = IndygoPoolFiltrationModeSelect(mock_coordinator, module_id, "Pump")
 
         cancel_cb = MagicMock()
         with patch(
@@ -183,7 +185,7 @@ class TestIndygoPoolSelect:
             )
         }
 
-        entity = IndygoPoolSelect(mock_coordinator, module_id, "Pump")
+        entity = IndygoPoolFiltrationModeSelect(mock_coordinator, module_id, "Pump")
         entity.hass = MagicMock()
 
         with patch(
@@ -212,7 +214,7 @@ class TestIndygoPoolSelect:
             )
         }
 
-        entity = IndygoPoolSelect(mock_coordinator, module_id, "Pump")
+        entity = IndygoPoolFiltrationModeSelect(mock_coordinator, module_id, "Pump")
         entity.hass = MagicMock()
 
         cancel_cb = MagicMock()
@@ -230,7 +232,7 @@ class TestIndygoPoolSelect:
     @pytest.mark.asyncio
     async def test_removal_without_pending_refresh_is_a_no_op(self, mock_coordinator):
         """Removing an idle entity must not raise."""
-        entity = IndygoPoolSelect(mock_coordinator, "mod1", "Pump")
+        entity = IndygoPoolFiltrationModeSelect(mock_coordinator, "mod1", "Pump")
 
         await entity.async_will_remove_from_hass()
 
@@ -239,7 +241,7 @@ class TestIndygoPoolSelect:
     @pytest.mark.asyncio
     async def test_select_option_invalid(self, mock_coordinator):
         """Test selecting an invalid option."""
-        entity = IndygoPoolSelect(mock_coordinator, "mod1", "Pump")
+        entity = IndygoPoolFiltrationModeSelect(mock_coordinator, "mod1", "Pump")
         mock_coordinator.data.modules = {
             "mod1": IndygoModuleData(
                 id="mod1",
@@ -256,7 +258,7 @@ class TestIndygoPoolSelect:
     @pytest.mark.asyncio
     async def test_select_option_missing_module(self, mock_coordinator):
         """Test missing module in select option."""
-        entity = IndygoPoolSelect(mock_coordinator, "mod1", "Pump")
+        entity = IndygoPoolFiltrationModeSelect(mock_coordinator, "mod1", "Pump")
         mock_coordinator.data.modules = {}
 
         await entity.async_select_option(MODE_AUTO)
@@ -265,7 +267,7 @@ class TestIndygoPoolSelect:
     @pytest.mark.asyncio
     async def test_select_option_no_filtration(self, mock_coordinator):
         """Test missing filtration program in select option."""
-        entity = IndygoPoolSelect(mock_coordinator, "mod1", "Pump")
+        entity = IndygoPoolFiltrationModeSelect(mock_coordinator, "mod1", "Pump")
         mock_coordinator.data.modules = {
             "mod1": IndygoModuleData(
                 id="mod1", type="lr-pc", name="Pump", filtration_program=None
@@ -412,9 +414,9 @@ class TestVariableSpeedSelects:
         await async_setup_entry(hass, entry, async_add_entities)
 
         entities = async_add_entities.call_args[0][0]
-        assert sorted((type(e).__name__, e._module_id) for e in entities) == [
-            ("IndygoPoolManagementSelect", "vs"),
-            ("IndygoPoolSelect", "pc"),
-            ("IndygoPoolSelect", "vs"),
-            ("IndygoPoolSpeedSelect", "vs"),
+        assert sorted(e.unique_id for e in entities) == [
+            "test_pool_id_pc_filtration_mode",
+            "test_pool_id_vs_filtration_management",
+            "test_pool_id_vs_filtration_mode",
+            "test_pool_id_vs_filtration_speed",
         ]

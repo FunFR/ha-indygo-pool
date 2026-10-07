@@ -8,7 +8,17 @@ from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_call_later
 
-from .const import DOMAIN, LOGGER, PUMP_SPEED_STATES, VARIABLE_SPEED_FIELD
+from .const import (
+    DOMAIN,
+    LOGGER,
+    ON_SPEED_FIELD,
+    PROGRAM_RULE_SCHEDULE,
+    PROGRAM_RULE_THERMO_ADAPTIVE,
+    PROGRAM_RULE_VARIABLE_SPEED,
+    PUMP_SPEED_STATES,
+    RULE_FIELD,
+    VARIABLE_SPEED_FIELD,
+)
 from .coordinator import IndygoPoolDataUpdateCoordinator
 from .entity import IndygoPoolEntity
 from .models import IndygoModuleData
@@ -32,11 +42,10 @@ MODE_TO_INT = {
 # programCharacteristics.defaultProgramSpeed / onSpeed of variable-speed pumps.
 SPEED_TO_INT = {state: speed for speed, state in PUMP_SPEED_STATES.items() if speed}
 
-# programCharacteristics.rule of variable-speed pumps.
 MANAGEMENT_TO_INT = {
-    "schedule": 0,
-    "thermo_adaptive": 1,
-    "variable_speed": 2,
+    "schedule": PROGRAM_RULE_SCHEDULE,
+    "thermo_adaptive": PROGRAM_RULE_THERMO_ADAPTIVE,
+    "variable_speed": PROGRAM_RULE_VARIABLE_SPEED,
 }
 
 
@@ -55,7 +64,9 @@ async def async_setup_entry(
     for module_id, module in coordinator.data.modules.items():
         if not module.filtration_program:
             continue
-        entity_classes: list[type[IndygoPoolProgramSelect]] = [IndygoPoolSelect]
+        entity_classes: list[type[IndygoPoolProgramSelect]] = [
+            IndygoPoolFiltrationModeSelect
+        ]
         if module.has_variable_speed:
             entity_classes += [IndygoPoolSpeedSelect, IndygoPoolManagementSelect]
         entities.extend(
@@ -177,7 +188,7 @@ class IndygoPoolProgramSelect(IndygoPoolEntity, SelectEntity):
         await super().async_will_remove_from_hass()
 
 
-class IndygoPoolSelect(IndygoPoolProgramSelect):
+class IndygoPoolFiltrationModeSelect(IndygoPoolProgramSelect):
     """Filtration mode (Off/On/Auto)."""
 
     _key = "filtration_mode"
@@ -193,7 +204,7 @@ class IndygoPoolSpeedSelect(IndygoPoolProgramSelect):
 
     _key = "filtration_speed"
     _option_to_int = SPEED_TO_INT
-    _fields = (VARIABLE_SPEED_FIELD, "onSpeed")
+    _fields = (VARIABLE_SPEED_FIELD, ON_SPEED_FIELD)
     _attr_icon = "mdi:speedometer"
 
 
@@ -202,5 +213,5 @@ class IndygoPoolManagementSelect(IndygoPoolProgramSelect):
 
     _key = "filtration_management"
     _option_to_int = MANAGEMENT_TO_INT
-    _fields = ("rule",)
+    _fields = (RULE_FIELD,)
     _attr_icon = "mdi:calendar-clock"
