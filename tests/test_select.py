@@ -7,12 +7,17 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from custom_components.indygo_pool.coordinator import IndygoPoolDataUpdateCoordinator
-from custom_components.indygo_pool.models import IndygoModuleData, IndygoPoolData
+from custom_components.indygo_pool.models import (
+    IndygoModuleData,
+    IndygoPoolData,
+    IndygoSensorData,
+)
 from custom_components.indygo_pool.select import (
     DELAYED_REFRESH_SECONDS,
     MODE_AUTO,
     MODE_OFF,
     MODE_ON,
+    IndygoPoolBoostSelect,
     IndygoPoolFiltrationModeSelect,
     IndygoPoolManagementSelect,
     IndygoPoolSpeedSelect,
@@ -301,11 +306,13 @@ class TestIndygoPoolSelect:
 
         await async_setup_entry(hass, entry, async_add_entities)
 
-        # Should only add 1 entity (for mod1 which has a filtration program)
+        # Only mod1 has a filtration program
         async_add_entities.assert_called_once()
         entities = async_add_entities.call_args[0][0]
-        assert len(entities) == 1
-        assert entities[0]._module_id == "mod1"
+        assert sorted(e.unique_id for e in entities) == [
+            "test_pool_id_mod1_filtration_boost",
+            "test_pool_id_mod1_filtration_mode",
+        ]
 
     @pytest.mark.asyncio
     async def test_async_setup_entry_no_data(self, mock_coordinator):
@@ -428,7 +435,9 @@ class TestVariableSpeedSelects:
         await async_setup_entry(hass, entry, async_add_entities)
 
         entities = async_add_entities.call_args[0][0]
-        assert sorted(e.unique_id for e in entities) == [
+        assert sorted(
+            e.unique_id for e in entities if not isinstance(e, IndygoPoolBoostSelect)
+        ) == [
             "test_pool_id_old_filtration_mode",
             "test_pool_id_pc_filtration_management",
             "test_pool_id_pc_filtration_mode",
@@ -436,3 +445,109 @@ class TestVariableSpeedSelects:
             "test_pool_id_vs_filtration_mode",
             "test_pool_id_vs_filtration_speed",
         ]
+
+
+@pytest.fixture
+def boost_coordinator(mock_coordinator):
+    """Coordinator holding a Pool Command whose live status shows no boost."""
+    mock_coordinator.data.modules = {
+        "mod1": IndygoModuleData(
+            id="mod1",
+            type="lr-pc",
+            name="Pump",
+            raw_data={"serialNumber": "150302ABCDEF0001"},
+            filtration_program={"programCharacteristics": {"mode": 2}},
+            sensors={"pump_boost": IndygoSensorData(key="pump_boost", value=False)},
+        )
+    }
+    return mock_coordinator
+
+
+class TestBoostSelect:
+    """Filtration boost select."""
+
+    def test_options_match_the_app(self, boost_coordinator):
+        """Durations offered by the MyIndygo app, plus off."""
+        entity = IndygoPoolBoostSelect(boost_coordinator, "mod1", "Pump")
+
+        assert entity.options == [
+            "off",
+            "2h",
+            "4h",
+            "8h",
+            "12h",
+            "24h",
+            "36h",
+            "48h",
+            "72h",
+        ]
+        assert entity.unique_id == "test_pool_id_mod1_filtration_boost"
+
+    def test_off_without_boost(self, boost_coordinator):
+        """No running boost reads as off."""
+        entity = IndygoPoolBoostSelect(boost_coordinator, "mod1", "Pump")
+
+        assert entity.current_option == "off"
+
+    @pytest.mark.asyncio
+    async def test_start(self, boost_coordinator):
+        """Picking a duration starts a boost on the module serial."""
+        entity = IndygoPoolBoostSelect(boost_coordinator, "mod1", "Pump")
+
+        with patch("custom_components.indygo_pool.select.async_call_later"):
+            await entity.async_select_option("36h")
+
+        boost_coordinator.client.async_start_boost.assert_awaited_once_with(
+            "150302ABCDEF0001", 36
+        )
+        boost_coordinator.async_request_refresh.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_running_boost_shows_the_picked_duration(self, boost_coordinator):
+        """The API does not return the duration, so the last pick is shown."""
+        entity = IndygoPoolBoostSelect(boost_coordinator, "mod1", "Pump")
+        boost_coordinator.data.modules["mod1"].sensors["pump_boost"].value = True
+        assert entity.current_option is None
+
+        with patch("custom_components.indygo_pool.select.async_call_later"):
+            await entity.async_select_option("4h")
+
+        assert entity.current_option == "4h"
+
+    @pytest.mark.asyncio
+    async def test_stop(self, boost_coordinator):
+        """Off stops the boost."""
+        entity = IndygoPoolBoostSelect(boost_coordinator, "mod1", "Pump")
+
+        with patch("custom_components.indygo_pool.select.async_call_later"):
+            await entity.async_select_option("off")
+
+        boost_coordinator.client.async_stop_boost.assert_awaited_once_with(
+            "150302ABCDEF0001"
+        )
+
+    @pytest.mark.asyncio
+    async def test_setup_adds_boost_for_pool_command(self, boost_coordinator):
+        """Every module with a filtration program gets the boost select."""
+        hass = MagicMock(spec=HomeAssistant)
+        entry = MagicMock(spec=ConfigEntry)
+        entry.entry_id = "test_entry_id"
+        hass.data = {"indygo_pool": {"test_entry_id": boost_coordinator}}
+        async_add_entities = MagicMock()
+
+        await async_setup_entry(hass, entry, async_add_entities)
+
+        unique_ids = {e.unique_id for e in async_add_entities.call_args[0][0]}
+        assert "test_pool_id_mod1_filtration_boost" in unique_ids
+
+
+@pytest.mark.asyncio
+async def test_boost_without_serial_sends_nothing(boost_coordinator):
+    """A module without serial number cannot be addressed."""
+    boost_coordinator.data.modules["mod1"].raw_data = {}
+    entity = IndygoPoolBoostSelect(boost_coordinator, "mod1", "Pump")
+
+    await entity.async_select_option("2h")
+
+    boost_coordinator.client.async_start_boost.assert_not_called()
+    boost_coordinator.async_request_refresh.assert_not_called()

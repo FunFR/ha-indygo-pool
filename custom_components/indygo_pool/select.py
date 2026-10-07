@@ -48,6 +48,9 @@ MANAGEMENT_TO_INT = {
     "variable_speed": PROGRAM_RULE_VARIABLE_SPEED,
 }
 
+# Boost durations (hours) offered by the MyIndygo app; 0 stops the boost.
+BOOST_TO_HOURS = {"off": 0} | {f"{h}h": h for h in (2, 4, 8, 12, 24, 36, 48, 72)}
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -56,7 +59,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up the select platform."""
     coordinator: IndygoPoolDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
-    entities: list[IndygoPoolProgramSelect] = []
+    entities: list[IndygoPoolCommandSelect] = []
 
     if not coordinator.data:
         return
@@ -65,8 +68,9 @@ async def async_setup_entry(
         if not module.filtration_program:
             continue
         characteristics = module.filtration_program.get("programCharacteristics", {})
-        entity_classes: list[type[IndygoPoolProgramSelect]] = [
-            IndygoPoolFiltrationModeSelect
+        entity_classes: list[type[IndygoPoolCommandSelect]] = [
+            IndygoPoolFiltrationModeSelect,
+            IndygoPoolBoostSelect,
         ]
         if RULE_FIELD in characteristics:
             entity_classes.append(IndygoPoolManagementSelect)
@@ -80,13 +84,11 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class IndygoPoolProgramSelect(IndygoPoolEntity, SelectEntity):
-    """Select writing fields of the filtration program characteristics."""
+class IndygoPoolCommandSelect(IndygoPoolEntity, SelectEntity):
+    """Select sending a command to a Pool Command module."""
 
     _key: str
     _option_to_int: dict[str, int]
-    # Characteristics written with the selected value; the first one is read.
-    _fields: tuple[str, ...]
     _attr_icon = "mdi:pump"
 
     def __init__(
@@ -103,39 +105,25 @@ class IndygoPoolProgramSelect(IndygoPoolEntity, SelectEntity):
         self.entity_id = f"select.{self.device_name_slug}_{self._key}"
         self._cancel_delayed_refresh: CALLBACK_TYPE | None = None
 
-    @property
-    def current_option(self) -> str | None:
-        """Return the selected entity option to represent the entity state."""
+    def _get_module(self) -> IndygoModuleData | None:
+        """Return this entity's module from the latest coordinator data."""
         data = self.coordinator.data
-        if not data or self._module_id not in data.modules:
+        if not data or self._module_id is None:
             return None
+        return data.modules.get(self._module_id)
 
-        module: IndygoModuleData = data.modules[self._module_id]
-        if not module.filtration_program:
-            return None
-
-        value = module.filtration_program.get("programCharacteristics", {}).get(
-            self._fields[0]
-        )
-        return next(
-            (opt for opt, val in self._option_to_int.items() if val == value), None
-        )
+    async def _async_send(
+        self, module: IndygoModuleData, option: str, value: int
+    ) -> bool:
+        """Send the command for the selected option; False if impossible."""
+        raise NotImplementedError
 
     async def async_select_option(self, option: str) -> None:
         """Change the selected option."""
-        data = self.coordinator.data
-        if not data or self._module_id not in data.modules:
+        module = self._get_module()
+        if module is None:
             LOGGER.error(
                 "Cannot set %s: Module %s not found", self._key, self._module_id
-            )
-            return
-
-        module: IndygoModuleData = data.modules[self._module_id]
-        if not module.filtration_program:
-            LOGGER.error(
-                "Cannot set %s: Filtration program not found for module %s",
-                self._key,
-                self._module_id,
             )
             return
 
@@ -144,11 +132,8 @@ class IndygoPoolProgramSelect(IndygoPoolEntity, SelectEntity):
             LOGGER.error("Invalid option selected: %s", option)
             return
 
-        await self.coordinator.client.async_update_program_characteristics(
-            self._module_id,
-            module.filtration_program,
-            **dict.fromkeys(self._fields, value),
-        )
+        if not await self._async_send(module, option, value):
+            return
 
         # Trigger immediate refresh
         await self.coordinator.async_request_refresh()
@@ -189,6 +174,93 @@ class IndygoPoolProgramSelect(IndygoPoolEntity, SelectEntity):
             self._cancel_delayed_refresh()
             self._cancel_delayed_refresh = None
         await super().async_will_remove_from_hass()
+
+
+class IndygoPoolProgramSelect(IndygoPoolCommandSelect):
+    """Select writing fields of the filtration program characteristics."""
+
+    # Characteristics written with the selected value; the first one is read.
+    _fields: tuple[str, ...]
+
+    @property
+    def current_option(self) -> str | None:
+        """Return the selected entity option to represent the entity state."""
+        module = self._get_module()
+        if module is None or not module.filtration_program:
+            return None
+
+        value = module.filtration_program.get("programCharacteristics", {}).get(
+            self._fields[0]
+        )
+        return next(
+            (opt for opt, val in self._option_to_int.items() if val == value), None
+        )
+
+    async def _async_send(
+        self, module: IndygoModuleData, option: str, value: int
+    ) -> bool:
+        """Write the value into every field of the filtration program."""
+        if not module.filtration_program:
+            LOGGER.error(
+                "Cannot set %s: Filtration program not found for module %s",
+                self._key,
+                self._module_id,
+            )
+            return False
+
+        await self.coordinator.client.async_update_program_characteristics(
+            module.id,
+            module.filtration_program,
+            **dict.fromkeys(self._fields, value),
+        )
+        return True
+
+
+class IndygoPoolBoostSelect(IndygoPoolCommandSelect):
+    """Filtration boost: pick a duration to start it, off to stop it.
+
+    The live status only says whether a boost runs, not its duration, so a
+    running boost shows the duration last picked from Home Assistant.
+    """
+
+    _key = "filtration_boost"
+    _option_to_int = BOOST_TO_HOURS
+    _attr_icon = "mdi:rocket-launch"
+
+    def __init__(
+        self,
+        coordinator: IndygoPoolDataUpdateCoordinator,
+        module_id: str,
+        module_name: str,
+    ) -> None:
+        """Initialize."""
+        super().__init__(coordinator, module_id, module_name)
+        self._picked_option: str | None = None
+
+    @property
+    def current_option(self) -> str | None:
+        """Return off, or the picked duration while a boost runs."""
+        module = self._get_module()
+        boost = module.sensors.get("pump_boost") if module else None
+        if boost is None:
+            return None
+        return self._picked_option if boost.value else "off"
+
+    async def _async_send(
+        self, module: IndygoModuleData, option: str, value: int
+    ) -> bool:
+        """Start a boost of ``value`` hours, or stop it when 0."""
+        serial = module.raw_data.get("serialNumber")
+        if not serial:
+            LOGGER.error("Cannot set %s: no serial for %s", self._key, module.id)
+            return False
+
+        if value:
+            await self.coordinator.client.async_start_boost(serial, value)
+        else:
+            await self.coordinator.client.async_stop_boost(serial)
+        self._picked_option = option
+        return True
 
 
 class IndygoPoolFiltrationModeSelect(IndygoPoolProgramSelect):

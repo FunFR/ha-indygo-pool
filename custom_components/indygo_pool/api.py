@@ -23,6 +23,10 @@ from .parser import IndygoParser
 
 BASE_URL = "https://myindygo.com"
 
+# linesControl actions, captured from the MyIndygo web app.
+REMOTE_ACTION_STOP = 1
+REMOTE_ACTION_BOOST = 3
+
 # Identify this client honestly on every request.  Without it aiohttp sends its
 # own default ("Python/3.x aiohttp/3.x"), which tells MyIndygo nothing except
 # that an unidentified script is talking to them.  A named client can be
@@ -496,44 +500,34 @@ class IndygoPoolApiClient:
             raise
 
     # ------------------------------------------------------------------
-    # Remote control  (immediate on/off commands)
+    # Remote control  (filtration boost)
     # ------------------------------------------------------------------
 
-    async def async_send_remote_control(
-        self,
-        mode: str,
-        module_serial: str | None = None,
-        action: int = 1,
-        **kwargs: Any,
-    ) -> None:
-        """Send an immediate remote control command.
+    async def async_start_boost(self, module_serial: str, hours: int) -> None:
+        """Run the filtration for ``hours`` regardless of its program."""
+        await self._send_filtration_control(
+            module_serial, {"action": REMOTE_ACTION_BOOST, "time": f"{hours:02d}:00"}
+        )
 
-        Args:
-            mode: The mode to set ("on", "off", "auto").
-            module_serial: Serial number of the module.
-            action: Action code (1=Stop, 3=Forced March).
-            **kwargs: Additional parameters (e.g. time, manualDuration).
+    async def async_stop_boost(self, module_serial: str) -> None:
+        """Stop a running filtration boost."""
+        await self._send_filtration_control(
+            module_serial, {"action": REMOTE_ACTION_STOP}
+        )
+
+    async def _send_filtration_control(self, module_serial: str, line: dict) -> None:
+        """Send an immediate command to the filtration line, like the web app.
+
+        The response body is not JSON, hence the raw request.
         """
-        serial = module_serial or self._pool_address
-        if not serial:
-            LOGGER.warning("Missing serial number, skipping remote control")
-            return
-
-        lines_control_item: dict[str, Any] = {
-            "index": 0,
-            "mode": mode,
-            "action": action,
-        }
-        if kwargs:
-            lines_control_item.update(kwargs)
-
         payload = {
-            "moduleSerialNumber": serial,
-            "linesControl": [lines_control_item],
+            "moduleSerialNumber": module_serial,
+            "linesControl": [{**line, "index": 0}],
         }
-
         LOGGER.debug("Sending remote control: %s", payload)
-        await self._api_post("/api/setManualCommandToSend", payload)
+        await self._request(
+            "POST", f"{BASE_URL}/remote/module/control", json_body=payload
+        )
 
     async def async_synchronize_lorawan(
         self, module_id: str, send_program: bool = True, send_command: bool = True

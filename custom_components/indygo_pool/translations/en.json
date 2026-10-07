@@ -150,6 +150,20 @@
                     "thermo_adaptive": "Thermo-adaptive",
                     "variable_speed": "Variable speed"
                 }
+            },
+            "filtration_boost": {
+                "name": "Filtration boost",
+                "state": {
+                    "off": "Off",
+                    "2h": "2 h",
+                    "4h": "4 h",
+                    "8h": "8 h",
+                    "12h": "12 h",
+                    "24h": "24 h",
+                    "36h": "36 h",
+                    "48h": "48 h",
+                    "72h": "72 h"
+                }
             }
         },
         "switch": {

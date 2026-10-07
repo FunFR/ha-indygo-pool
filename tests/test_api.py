@@ -460,28 +460,58 @@ async def test_set_filtration_mode_sync_failure():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
-async def test_send_remote_control():
-    """Test send remote control command."""
-    if aioresponses is None:
-        pytest.skip("aioresponses not installed")
+REMOTE_CONTROL_URL = f"{BASE_URL}/remote/module/control"
 
+
+async def _send_boost_command(method: str, *args: int) -> dict:
+    """Run a boost command and return the remote control payload sent."""
     with aioresponses() as m:
-        m.post(
-            f"{BASE_URL}/api/setManualCommandToSend",
-            payload={"status": "ok"},
-        )
+        m.post(REMOTE_CONTROL_URL, body="OK")
 
         async with aiohttp.ClientSession() as session:
             client = _make_client(session)
-            client._pool_address = "ABCDE"
+            await getattr(client, method)(TEST_SERIAL, *args)
 
-            await client.async_send_remote_control("off", "ABCDE", action=1)
+        return m.requests[("POST", URL(REMOTE_CONTROL_URL))][0].kwargs["json"]
 
-            req = m.requests[("POST", URL(f"{BASE_URL}/api/setManualCommandToSend"))][0]
-            payload = req.kwargs.get("json", {})
-            assert payload["moduleSerialNumber"] == "ABCDE"
-            assert payload["linesControl"][0]["action"] == 1
+
+@pytest.mark.asyncio
+async def test_start_boost():
+    """Payload captured from the MyIndygo web app (2 h boost)."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    payload = await _send_boost_command("async_start_boost", 2)
+
+    assert payload == {
+        "moduleSerialNumber": TEST_SERIAL,
+        "linesControl": [{"action": 3, "time": "02:00", "index": 0}],
+    }
+
+
+@pytest.mark.asyncio
+async def test_start_boost_beyond_a_day():
+    """Durations over 24 h keep the HH:MM shape."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    payload = await _send_boost_command("async_start_boost", 72)
+
+    assert payload["linesControl"][0]["time"] == "72:00"
+
+
+@pytest.mark.asyncio
+async def test_stop_boost():
+    """Payload captured from the MyIndygo web app (stop boost)."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    payload = await _send_boost_command("async_stop_boost")
+
+    assert payload == {
+        "moduleSerialNumber": TEST_SERIAL,
+        "linesControl": [{"action": 1, "index": 0}],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -777,54 +807,6 @@ async def test_get_data_missing_hardware_ids_falls_back_to_sensor_only():
             assert client._device_short_id is None
             assert client._relay_id is None
             assert data.sensors["temperature"].value == TEST_SENSOR_ONLY_TEMP
-
-
-@pytest.mark.asyncio
-async def test_remote_control_no_serial():
-    """Test remote control with no serial available."""
-    if aioresponses is None:
-        pytest.skip("aioresponses not installed")
-
-    with aioresponses() as m:
-        async with aiohttp.ClientSession() as session:
-            client = _make_client(session)
-            client._pool_address = None
-
-            # Should not raise, just log warning
-            await client.async_send_remote_control("off")
-            # No request should have been made
-            assert len(m.requests) == 0
-
-
-@pytest.mark.asyncio
-async def test_remote_control_with_kwargs():
-    """Test remote control passes extra kwargs."""
-    if aioresponses is None:
-        pytest.skip("aioresponses not installed")
-
-    with aioresponses() as m:
-        m.post(f"{BASE_URL}/api/setManualCommandToSend", payload={"status": "ok"})
-
-        async with aiohttp.ClientSession() as session:
-            client = _make_client(session)
-            client._pool_address = "SER1"
-
-            expected_action = 3
-            expected_time = 60
-            expected_duration = 120
-            await client.async_send_remote_control(
-                "on",
-                action=expected_action,
-                time=expected_time,
-                manualDuration=expected_duration,
-            )
-
-            req = m.requests[("POST", URL(f"{BASE_URL}/api/setManualCommandToSend"))][0]
-            payload = req.kwargs.get("json", {})
-            item = payload["linesControl"][0]
-            assert item["action"] == expected_action
-            assert item["time"] == expected_time
-            assert item["manualDuration"] == expected_duration
 
 
 @pytest.mark.asyncio
