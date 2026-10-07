@@ -9,7 +9,6 @@ from typing import Any
 from .const import (
     PROGRAM_TYPE_FILTRATION,
     PUMP_SPEED_STATES,
-    VARIABLE_SPEED_FIELD,
 )
 from .models import IndygoModuleData, IndygoPoolData, IndygoSensorData
 
@@ -329,10 +328,7 @@ class IndygoParser:
         Their pool[0].value is the running speed instead of an on/off flag,
         and a boost only shows up here (info gains "boost"), not in programs.
         """
-        characteristics = (module.filtration_program or {}).get(
-            "programCharacteristics", {}
-        )
-        if VARIABLE_SPEED_FIELD not in characteristics:
+        if not module.has_variable_speed:
             return
         speed = item.get("value")
         module.sensors["pump_speed"] = IndygoSensorData(

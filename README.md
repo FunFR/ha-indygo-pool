@@ -23,7 +23,7 @@ Indygo Pool is a custom integration for Home Assistant that allows you to monito
 - **Electrolyser Status**: Monitor the production status.
 - **Filtration Control**: Switch between Auto, Manual ON, and Manual OFF modes.
 - **Auxiliary circuits**: Control the devices wired to the Pool Command auxiliary outputs — spotlight, water blade, secondary pump — as switches, reporting the live circuit state published by the board.
-- **Pool Command VS² support**: Compatible with `lr-pc-vs2` hardware variants. Variable-speed pumps also get the configured speed (V1 to V3) and management type (schedule, thermo-adaptive, variable speed) as selects, plus the live pump speed and whether a boost is running. The schedule and variable-speed management types rely on a weekly schedule set up in the MyIndygo app.
+- **Pool Command VS² support**: Compatible with `lr-pc-vs2` hardware variants. Variable-speed pumps also get the configured speed (V1 to V3) and management type (schedule, thermo-adaptive, variable speed) as selects, plus the live pump speed and whether a boost is running. The schedule and thermo-adaptive management types rely on a weekly schedule set up in the MyIndygo app.
 
 ## Installation
 

@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from .const import VARIABLE_SPEED_FIELD
+
 
 @dataclass
 class IndygoSensorData:
@@ -27,6 +29,14 @@ class IndygoModuleData:
     programs: list[dict[str, Any]] = field(default_factory=list)
     filtration_program: dict[str, Any] | None = None
     pool_status: dict[str, IndygoSensorData] = field(default_factory=dict)
+
+    @property
+    def has_variable_speed(self) -> bool:
+        """Return True when the filtration pump runs at variable speed."""
+        characteristics = (self.filtration_program or {}).get(
+            "programCharacteristics", {}
+        )
+        return VARIABLE_SPEED_FIELD in characteristics
 
 
 @dataclass

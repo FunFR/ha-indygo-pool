@@ -53,11 +53,10 @@ async def async_setup_entry(
         return
 
     for module_id, module in coordinator.data.modules.items():
-        program = module.filtration_program
-        if not program:
+        if not module.filtration_program:
             continue
         entity_classes: list[type[IndygoPoolProgramSelect]] = [IndygoPoolSelect]
-        if VARIABLE_SPEED_FIELD in program.get("programCharacteristics", {}):
+        if module.has_variable_speed:
             entity_classes += [IndygoPoolSpeedSelect, IndygoPoolManagementSelect]
         entities.extend(
             entity_class(coordinator, module_id, module.name)
