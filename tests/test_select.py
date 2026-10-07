@@ -391,9 +391,20 @@ class TestVariableSpeedSelects:
             "mod1", VS_PROGRAM, rule=0
         )
 
+    def test_single_speed_management_has_no_variable_speed(self, mock_coordinator):
+        """Variable-speed management is only offered on variable-speed pumps."""
+        mock_coordinator.data.modules = {
+            "pc": IndygoModuleData(
+                id="pc", type="lr-pc", name="PC", filtration_program=VS_PROGRAM
+            )
+        }
+        entity = IndygoPoolManagementSelect(mock_coordinator, "pc", "PC")
+
+        assert entity.options == ["schedule", "thermo_adaptive"]
+
     @pytest.mark.asyncio
-    async def test_setup_adds_vs_selects_only_for_vs_programs(self, mock_coordinator):
-        """Single-speed pumps keep only the mode select."""
+    async def test_setup_adds_speed_select_only_for_vs_modules(self, mock_coordinator):
+        """Plain LR-PC programs carry speed fields too: the module type decides."""
         hass = MagicMock(spec=HomeAssistant)
         entry = MagicMock(spec=ConfigEntry)
         entry.entry_id = "test_entry_id"
@@ -403,9 +414,12 @@ class TestVariableSpeedSelects:
                 id="vs", type="lr-pc-vs2", name="VS", filtration_program=VS_PROGRAM
             ),
             "pc": IndygoModuleData(
-                id="pc",
+                id="pc", type="lr-pc", name="PC", filtration_program=VS_PROGRAM
+            ),
+            "old": IndygoModuleData(
+                id="old",
                 type="lr-pc",
-                name="PC",
+                name="Old",
                 filtration_program={"programCharacteristics": {"mode": 2}},
             ),
         }
@@ -415,6 +429,8 @@ class TestVariableSpeedSelects:
 
         entities = async_add_entities.call_args[0][0]
         assert sorted(e.unique_id for e in entities) == [
+            "test_pool_id_old_filtration_mode",
+            "test_pool_id_pc_filtration_management",
             "test_pool_id_pc_filtration_mode",
             "test_pool_id_vs_filtration_management",
             "test_pool_id_vs_filtration_mode",

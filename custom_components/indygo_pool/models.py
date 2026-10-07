@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from .const import VARIABLE_SPEED_FIELD
+from .const import VARIABLE_SPEED_MODULE_PREFIX
 
 
 @dataclass
@@ -33,10 +33,7 @@ class IndygoModuleData:
     @property
     def has_variable_speed(self) -> bool:
         """Return True when the filtration pump runs at variable speed."""
-        characteristics = (self.filtration_program or {}).get(
-            "programCharacteristics", {}
-        )
-        return VARIABLE_SPEED_FIELD in characteristics
+        return self.type.startswith(VARIABLE_SPEED_MODULE_PREFIX)
 
 
 @dataclass

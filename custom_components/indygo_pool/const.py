@@ -31,9 +31,12 @@ PROGRAM_MODE_OFF = 0
 PROGRAM_MODE_ON = 1
 PROGRAM_MODE_AUTO = 2
 
-# Only variable-speed pump (LR-PC-VS*) filtration programs carry a speed.
+# Variable-speed Pool Command modules (lr-pc-vs2, ...). Plain LR-PC programs
+# carry the same speed fields, so the module type is what tells them apart.
+VARIABLE_SPEED_MODULE_PREFIX = "lr-pc-vs"
+
 # Confirmed on LR-PC-VS2 (#284): the vendor app writes defaultProgramSpeed and
-# onSpeed together (1-3), and rule holds the management type.
+# onSpeed together (1-3). rule holds the management type on every LR-PC.
 VARIABLE_SPEED_FIELD = "defaultProgramSpeed"
 ON_SPEED_FIELD = "onSpeed"
 RULE_FIELD = "rule"

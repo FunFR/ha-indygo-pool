@@ -64,11 +64,14 @@ async def async_setup_entry(
     for module_id, module in coordinator.data.modules.items():
         if not module.filtration_program:
             continue
+        characteristics = module.filtration_program.get("programCharacteristics", {})
         entity_classes: list[type[IndygoPoolProgramSelect]] = [
             IndygoPoolFiltrationModeSelect
         ]
+        if RULE_FIELD in characteristics:
+            entity_classes.append(IndygoPoolManagementSelect)
         if module.has_variable_speed:
-            entity_classes += [IndygoPoolSpeedSelect, IndygoPoolManagementSelect]
+            entity_classes.append(IndygoPoolSpeedSelect)
         entities.extend(
             entity_class(coordinator, module_id, module.name)
             for entity_class in entity_classes
@@ -209,9 +212,30 @@ class IndygoPoolSpeedSelect(IndygoPoolProgramSelect):
 
 
 class IndygoPoolManagementSelect(IndygoPoolProgramSelect):
-    """Management type (rule) of a variable-speed pump."""
+    """Management type (rule) of the filtration.
+
+    Only variable-speed pumps offer the variable-speed management type.
+    """
 
     _key = "filtration_management"
-    _option_to_int = MANAGEMENT_TO_INT
     _fields = (RULE_FIELD,)
     _attr_icon = "mdi:calendar-clock"
+
+    def __init__(
+        self,
+        coordinator: IndygoPoolDataUpdateCoordinator,
+        module_id: str,
+        module_name: str,
+    ) -> None:
+        """Initialize."""
+        module = coordinator.data.modules.get(module_id)
+        self._option_to_int = (
+            MANAGEMENT_TO_INT
+            if module and module.has_variable_speed
+            else {
+                option: rule
+                for option, rule in MANAGEMENT_TO_INT.items()
+                if rule != PROGRAM_RULE_VARIABLE_SPEED
+            }
+        )
+        super().__init__(coordinator, module_id, module_name)

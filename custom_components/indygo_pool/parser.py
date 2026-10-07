@@ -319,24 +319,25 @@ class IndygoParser:
                     )
 
             if idx == 0 and filt_module:
-                self._parse_variable_speed_status(filt_module, item)
+                self._parse_pump_status(filt_module, item)
 
     @staticmethod
-    def _parse_variable_speed_status(module: IndygoModuleData, item: dict) -> None:
-        """Expose the live speed and boost of a variable-speed pump.
+    def _parse_pump_status(module: IndygoModuleData, item: dict) -> None:
+        """Expose the boost state and, on variable-speed pumps, the live speed.
 
-        Their pool[0].value is the running speed instead of an on/off flag,
-        and a boost only shows up here (info gains "boost"), not in programs.
+        A boost only shows up here (info gains "boost"), not in programs.
+        Variable-speed pumps report the running speed in pool[0].value
+        instead of an on/off flag.
         """
+        module.sensors["pump_boost"] = IndygoSensorData(
+            key="pump_boost", value="boost" in (item.get("info") or [])
+        )
         if not module.has_variable_speed:
             return
         speed = item.get("value")
         module.sensors["pump_speed"] = IndygoSensorData(
             key="pump_speed",
             value=PUMP_SPEED_STATES.get(speed) if isinstance(speed, int) else None,
-        )
-        module.sensors["pump_boost"] = IndygoSensorData(
-            key="pump_boost", value="boost" in (item.get("info") or [])
         )
 
     def _parse_root_sensors(

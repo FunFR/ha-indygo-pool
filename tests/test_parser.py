@@ -980,18 +980,17 @@ class TestVariableSpeedPump:
         "info": ["pgm", "boost"],
     }
 
-    def _parse(self, pool_entry: dict, characteristics: dict | None = None):
+    def _parse(self, pool_entry: dict, module_type: str = "lr-pc-vs2"):
         json_data = {
             "modules": [
                 {
                     "id": "VS2",
-                    "type": "lr-pc-vs2",
+                    "type": module_type,
                     "name": "LRPCVS2",
                     "programs": [
                         {
                             "index": 0,
-                            "programCharacteristics": characteristics
-                            or self.PROGRAM_CHARACTERISTICS,
+                            "programCharacteristics": self.PROGRAM_CHARACTERISTICS,
                         }
                     ],
                 }
@@ -1027,12 +1026,9 @@ class TestVariableSpeedPump:
 
         assert module.sensors["pump_speed"].value is None
 
-    def test_single_speed_pump_has_no_speed_sensors(self):
-        """Programs without a speed belong to single-speed pumps."""
-        module = self._parse(
-            {"index": 0, "value": 1, "info": ["pgm"]},
-            {"programType": FILTRATION_PROGRAM_TYPE, "mode": 2},
-        )
+    def test_single_speed_pump_has_boost_but_no_speed(self):
+        """Plain LR-PC programs carry the same speed fields but one speed only."""
+        module = self._parse({"index": 0, "value": 1, "info": ["pgm"]}, "lr-pc")
 
         assert "pump_speed" not in module.sensors
-        assert "pump_boost" not in module.sensors
+        assert module.sensors["pump_boost"].value is False
