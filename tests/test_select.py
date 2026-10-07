@@ -455,7 +455,6 @@ def boost_coordinator(mock_coordinator):
             id="mod1",
             type="lr-pc",
             name="Pump",
-            raw_data={"serialNumber": "150302ABCDEF0001"},
             filtration_program={"programCharacteristics": {"mode": 2}},
             sensors={"pump_boost": IndygoSensorData(key="pump_boost", value=False)},
         )
@@ -491,15 +490,13 @@ class TestBoostSelect:
 
     @pytest.mark.asyncio
     async def test_start(self, boost_coordinator):
-        """Picking a duration starts a boost on the module serial."""
+        """Picking a duration starts a boost of that many hours."""
         entity = IndygoPoolBoostSelect(boost_coordinator, "mod1", "Pump")
 
         with patch("custom_components.indygo_pool.select.async_call_later"):
             await entity.async_select_option("36h")
 
-        boost_coordinator.client.async_start_boost.assert_awaited_once_with(
-            "150302ABCDEF0001", 36
-        )
+        boost_coordinator.client.async_start_boost.assert_awaited_once_with(36)
         boost_coordinator.async_request_refresh.assert_awaited_once()
 
     @pytest.mark.asyncio
@@ -522,9 +519,7 @@ class TestBoostSelect:
         with patch("custom_components.indygo_pool.select.async_call_later"):
             await entity.async_select_option("off")
 
-        boost_coordinator.client.async_stop_boost.assert_awaited_once_with(
-            "150302ABCDEF0001"
-        )
+        boost_coordinator.client.async_stop_boost.assert_awaited_once_with()
 
     @pytest.mark.asyncio
     async def test_setup_adds_boost_for_pool_command(self, boost_coordinator):
@@ -539,15 +534,3 @@ class TestBoostSelect:
 
         unique_ids = {e.unique_id for e in async_add_entities.call_args[0][0]}
         assert "test_pool_id_mod1_filtration_boost" in unique_ids
-
-
-@pytest.mark.asyncio
-async def test_boost_without_serial_sends_nothing(boost_coordinator):
-    """A module without serial number cannot be addressed."""
-    boost_coordinator.data.modules["mod1"].raw_data = {}
-    entity = IndygoPoolBoostSelect(boost_coordinator, "mod1", "Pump")
-
-    await entity.async_select_option("2h")
-
-    boost_coordinator.client.async_start_boost.assert_not_called()
-    boost_coordinator.async_request_refresh.assert_not_called()

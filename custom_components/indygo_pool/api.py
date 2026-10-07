@@ -23,9 +23,9 @@ from .parser import IndygoParser
 
 BASE_URL = "https://myindygo.com"
 
-# linesControl actions, captured from the MyIndygo web app.
-REMOTE_ACTION_STOP = 1
-REMOTE_ACTION_BOOST = 3
+# Manual command actions, from the MyIndygo Android app (URLManual).
+MANUAL_ACTION_STOP = 1
+MANUAL_ACTION_BOOST = 3
 
 # Identify this client honestly on every request.  Without it aiohttp sends its
 # own default ("Python/3.x aiohttp/3.x"), which tells MyIndygo nothing except
@@ -500,33 +500,33 @@ class IndygoPoolApiClient:
             raise
 
     # ------------------------------------------------------------------
-    # Remote control  (filtration boost)
+    # Manual commands  (filtration boost)
     # ------------------------------------------------------------------
 
-    async def async_start_boost(self, module_serial: str, hours: int) -> None:
+    async def async_start_boost(self, hours: int) -> None:
         """Run the filtration for ``hours`` regardless of its program."""
-        await self._send_filtration_control(
-            module_serial, {"action": REMOTE_ACTION_BOOST, "time": f"{hours:02d}:00"}
+        await self._send_filtration_command(
+            {"time": f"{hours:02d}:00", "action": MANUAL_ACTION_BOOST}
         )
 
-    async def async_stop_boost(self, module_serial: str) -> None:
+    async def async_stop_boost(self) -> None:
         """Stop a running filtration boost."""
-        await self._send_filtration_control(
-            module_serial, {"action": REMOTE_ACTION_STOP}
-        )
+        await self._send_filtration_command({"action": MANUAL_ACTION_STOP})
 
-    async def _send_filtration_control(self, module_serial: str, line: dict) -> None:
-        """Send an immediate command to the filtration line, like the web app.
+    async def _send_filtration_command(self, command: dict) -> None:
+        """Send a manual command to the filtration line.
 
-        The response body is not JSON, hence the raw request.
+        Same route as the MyIndygo Android app (URLManual): the cloud relays
+        it to the Pool Command through the gateway.
         """
-        payload = {
-            "moduleSerialNumber": module_serial,
-            "linesControl": [{**line, "index": 0}],
-        }
-        LOGGER.debug("Sending remote control: %s", payload)
-        await self._request(
-            "POST", f"{BASE_URL}/remote/module/control", json_body=payload
+        if not (self._pool_address and self._device_short_id):
+            raise IndygoPoolApiClientError("Missing gateway or device id")
+
+        payload = {"pool": {"index": 0, **command}}
+        LOGGER.debug("Sending manual command: %s", payload)
+        await self._api_post(
+            f"/api/module/{self._pool_address}/manual/{self._device_short_id}",
+            payload,
         )
 
     async def async_synchronize_lorawan(

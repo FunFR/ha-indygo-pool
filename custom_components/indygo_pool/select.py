@@ -250,15 +250,10 @@ class IndygoPoolBoostSelect(IndygoPoolCommandSelect):
         self, module: IndygoModuleData, option: str, value: int
     ) -> bool:
         """Start a boost of ``value`` hours, or stop it when 0."""
-        serial = module.raw_data.get("serialNumber")
-        if not serial:
-            LOGGER.error("Cannot set %s: no serial for %s", self._key, module.id)
-            return False
-
         if value:
-            await self.coordinator.client.async_start_boost(serial, value)
+            await self.coordinator.client.async_start_boost(value)
         else:
-            await self.coordinator.client.async_stop_boost(serial)
+            await self.coordinator.client.async_stop_boost()
         self._picked_option = option
         return True
 

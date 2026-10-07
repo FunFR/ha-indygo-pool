@@ -460,58 +460,64 @@ async def test_set_filtration_mode_sync_failure():
 # ---------------------------------------------------------------------------
 
 
-REMOTE_CONTROL_URL = f"{BASE_URL}/remote/module/control"
+MANUAL_URL = f"{BASE_URL}/api/module/{TEST_POOL_ADDRESS}/manual/ABC"
 
 
 async def _send_boost_command(method: str, *args: int) -> dict:
-    """Run a boost command and return the remote control payload sent."""
+    """Run a boost command and return the manual command payload sent."""
     with aioresponses() as m:
-        m.post(REMOTE_CONTROL_URL, body="OK")
+        m.post(MANUAL_URL, payload={"pool": []})
 
         async with aiohttp.ClientSession() as session:
             client = _make_client(session)
-            await getattr(client, method)(TEST_SERIAL, *args)
+            client._pool_address = TEST_POOL_ADDRESS
+            client._device_short_id = "ABC"
+            await getattr(client, method)(*args)
 
-        return m.requests[("POST", URL(REMOTE_CONTROL_URL))][0].kwargs["json"]
+        return m.requests[("POST", URL(MANUAL_URL))][0].kwargs["json"]
 
 
 @pytest.mark.asyncio
 async def test_start_boost():
-    """Payload captured from the MyIndygo web app (2 h boost)."""
+    """Same command as the MyIndygo Android app (ManualBoostActivity)."""
     if aioresponses is None:
         pytest.skip("aioresponses not installed")
 
     payload = await _send_boost_command("async_start_boost", 2)
 
-    assert payload == {
-        "moduleSerialNumber": TEST_SERIAL,
-        "linesControl": [{"action": 3, "time": "02:00", "index": 0}],
-    }
+    assert payload == {"pool": {"index": 0, "time": "02:00", "action": 3}}
 
 
 @pytest.mark.asyncio
 async def test_start_boost_beyond_a_day():
-    """Durations over 24 h keep the HH:MM shape."""
+    """Durations over 24 h keep the HH:MM shape, like the app."""
     if aioresponses is None:
         pytest.skip("aioresponses not installed")
 
     payload = await _send_boost_command("async_start_boost", 72)
 
-    assert payload["linesControl"][0]["time"] == "72:00"
+    assert payload["pool"]["time"] == "72:00"
 
 
 @pytest.mark.asyncio
 async def test_stop_boost():
-    """Payload captured from the MyIndygo web app (stop boost)."""
+    """Same stop command as the MyIndygo Android app."""
     if aioresponses is None:
         pytest.skip("aioresponses not installed")
 
     payload = await _send_boost_command("async_stop_boost")
 
-    assert payload == {
-        "moduleSerialNumber": TEST_SERIAL,
-        "linesControl": [{"action": 1, "index": 0}],
-    }
+    assert payload == {"pool": {"index": 0, "action": 1}}
+
+
+@pytest.mark.asyncio
+async def test_boost_without_hardware_ids_raises():
+    """Without the gateway and device ids the command cannot be routed."""
+    async with aiohttp.ClientSession() as session:
+        client = _make_client(session)
+
+        with pytest.raises(IndygoPoolApiClientError):
+            await client.async_stop_boost()
 
 
 # ---------------------------------------------------------------------------
