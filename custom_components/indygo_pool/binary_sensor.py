@@ -210,7 +210,8 @@ class IndygoPoolBinarySensor(IndygoPoolEntity, BinarySensorEntity):
                 val = target_status[desc.key].value
                 if val is not None:
                     try:
-                        return float(val) == 1.0
+                        # Variable-speed pumps report the running speed (1-3).
+                        return float(val) > 0
                     except ValueError, TypeError:
                         pass
             return None

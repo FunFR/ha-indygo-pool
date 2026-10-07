@@ -253,3 +253,22 @@ def test_is_on_invalid_values(mock_coordinator):
     )
     entity_flow = IndygoPoolBinarySensor(mock_coordinator, desc_flow, module_id="mod1")
     assert entity_flow.is_on is None
+
+
+@pytest.mark.parametrize(("speed", "expected"), [(0, False), (2, True), (3, True)])
+def test_filtration_runs_at_any_variable_speed(mock_coordinator, speed, expected):
+    """On variable-speed pumps the status value is the running speed (1-3)."""
+    mock_coordinator.data.modules = {
+        "mod1": IndygoModuleData(
+            id="mod1",
+            name="Pump",
+            type="lr-pc-vs2",
+            pool_status={"0": IndygoSensorData(key="0", value=speed)},
+        )
+    }
+    desc = IndygoBinarySensorEntityDescription(
+        key="0", is_pool_status=True, translation_key="filtration"
+    )
+    entity = IndygoPoolBinarySensor(mock_coordinator, desc, module_id="mod1")
+
+    assert entity.is_on is expected
