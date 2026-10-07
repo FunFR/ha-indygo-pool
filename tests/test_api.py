@@ -316,7 +316,7 @@ FILT_PROGRAM = {
 
 
 def _mock_filtration_endpoints(m):
-    """Mock all endpoints used by async_set_filtration_mode."""
+    """Mock all endpoints used by async_set_program_mode."""
     m.put(f"{BASE_URL}/api/updatePrograms", payload={"status": "ok"})
     m.post(
         f"{BASE_URL}/api/module/{TEST_POOL_ADDRESS}/programs/ABC",
@@ -357,7 +357,7 @@ async def test_set_filtration_mode():
                 raw_data={"serialNumber": TEST_SERIAL},
             )
 
-            await client.async_set_filtration_mode(
+            await client.async_set_program_mode(
                 TEST_MODULE_ID, FILT_PROGRAM, expected_mode
             )
 
@@ -412,9 +412,7 @@ async def test_set_filtration_mode_parameterized(new_mode):
                 raw_data={"serialNumber": TEST_SERIAL},
             )
 
-            await client.async_set_filtration_mode(
-                TEST_MODULE_ID, filt_program, new_mode
-            )
+            await client.async_set_program_mode(TEST_MODULE_ID, filt_program, new_mode)
 
             # Verify the mode in the report call
             report_key = (
@@ -454,7 +452,7 @@ async def test_set_filtration_mode_sync_failure():
 
             # Should raise because report failure propagates
             with pytest.raises(IndygoPoolApiClientError):
-                await client.async_set_filtration_mode(TEST_MODULE_ID, FILT_PROGRAM, 0)
+                await client.async_set_program_mode(TEST_MODULE_ID, FILT_PROGRAM, 0)
 
 
 # ---------------------------------------------------------------------------
@@ -462,28 +460,75 @@ async def test_set_filtration_mode_sync_failure():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
-async def test_send_remote_control():
-    """Test send remote control command."""
-    if aioresponses is None:
-        pytest.skip("aioresponses not installed")
+MANUAL_URL = f"{BASE_URL}/api/module/{TEST_POOL_ADDRESS}/manual/ABC"
 
+
+async def _send_boost_command(method: str, *args: int) -> dict:
+    """Run a boost command and return the manual command payload sent."""
     with aioresponses() as m:
-        m.post(
-            f"{BASE_URL}/api/setManualCommandToSend",
-            payload={"status": "ok"},
-        )
+        m.post(MANUAL_URL, payload={"pool": []})
 
         async with aiohttp.ClientSession() as session:
             client = _make_client(session)
-            client._pool_address = "ABCDE"
+            client._pool_address = TEST_POOL_ADDRESS
+            client._device_short_id = "ABC"
+            await getattr(client, method)(*args)
 
-            await client.async_send_remote_control("off", "ABCDE", action=1)
+        return m.requests[("POST", URL(MANUAL_URL))][0].kwargs["json"]
 
-            req = m.requests[("POST", URL(f"{BASE_URL}/api/setManualCommandToSend"))][0]
-            payload = req.kwargs.get("json", {})
-            assert payload["moduleSerialNumber"] == "ABCDE"
-            assert payload["linesControl"][0]["action"] == 1
+
+@pytest.mark.asyncio
+async def test_start_boost():
+    """Same command as the MyIndygo Android app (ManualBoostActivity)."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    payload = await _send_boost_command("async_start_boost", 0, 2)
+
+    assert payload == {"pool": {"index": 0, "time": "02:00", "action": 3}}
+
+
+@pytest.mark.asyncio
+async def test_start_boost_at_speed():
+    """Variable-speed pumps get the boost speed, like the app."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    payload = await _send_boost_command("async_start_boost", 0, 2, 3)
+
+    assert payload == {"pool": {"index": 0, "time": "02:00", "action": 3, "speed": 3}}
+
+
+@pytest.mark.asyncio
+async def test_start_boost_beyond_a_day():
+    """Durations over 24 h keep the HH:MM shape, like the app."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    payload = await _send_boost_command("async_start_boost", 0, 72)
+
+    assert payload["pool"]["time"] == "72:00"
+
+
+@pytest.mark.asyncio
+async def test_stop_boost():
+    """Same stop command as the MyIndygo Android app."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    payload = await _send_boost_command("async_stop_boost", 1)
+
+    assert payload == {"pool": {"index": 1, "action": 1}}
+
+
+@pytest.mark.asyncio
+async def test_boost_without_hardware_ids_raises():
+    """Without the gateway and device ids the command cannot be routed."""
+    async with aiohttp.ClientSession() as session:
+        client = _make_client(session)
+
+        with pytest.raises(IndygoPoolApiClientError):
+            await client.async_stop_boost(0)
 
 
 # ---------------------------------------------------------------------------
@@ -592,9 +637,7 @@ async def test_set_filtration_mode_preserves_other_program_modes():
                 raw_data={"serialNumber": TEST_SERIAL},
             )
 
-            await client.async_set_filtration_mode(
-                TEST_MODULE_ID, FILT_PROGRAM_WITH_ID, 2
-            )
+            await client.async_set_program_mode(TEST_MODULE_ID, FILT_PROGRAM_WITH_ID, 2)
 
             req = m.requests[("PUT", URL(f"{BASE_URL}/api/updatePrograms"))][0]
             payload = req.kwargs.get("json", {})
@@ -703,9 +746,7 @@ async def test_set_filtration_mode_program_not_in_list():
                 raw_data={"serialNumber": TEST_SERIAL},
             )
 
-            await client.async_set_filtration_mode(
-                TEST_MODULE_ID, FILT_PROGRAM_WITH_ID, 1
-            )
+            await client.async_set_program_mode(TEST_MODULE_ID, FILT_PROGRAM_WITH_ID, 1)
 
             # Program should still be appended
             req = m.requests[("PUT", URL(f"{BASE_URL}/api/updatePrograms"))][0]
@@ -786,54 +827,6 @@ async def test_get_data_missing_hardware_ids_falls_back_to_sensor_only():
 
 
 @pytest.mark.asyncio
-async def test_remote_control_no_serial():
-    """Test remote control with no serial available."""
-    if aioresponses is None:
-        pytest.skip("aioresponses not installed")
-
-    with aioresponses() as m:
-        async with aiohttp.ClientSession() as session:
-            client = _make_client(session)
-            client._pool_address = None
-
-            # Should not raise, just log warning
-            await client.async_send_remote_control("off")
-            # No request should have been made
-            assert len(m.requests) == 0
-
-
-@pytest.mark.asyncio
-async def test_remote_control_with_kwargs():
-    """Test remote control passes extra kwargs."""
-    if aioresponses is None:
-        pytest.skip("aioresponses not installed")
-
-    with aioresponses() as m:
-        m.post(f"{BASE_URL}/api/setManualCommandToSend", payload={"status": "ok"})
-
-        async with aiohttp.ClientSession() as session:
-            client = _make_client(session)
-            client._pool_address = "SER1"
-
-            expected_action = 3
-            expected_time = 60
-            expected_duration = 120
-            await client.async_send_remote_control(
-                "on",
-                action=expected_action,
-                time=expected_time,
-                manualDuration=expected_duration,
-            )
-
-            req = m.requests[("POST", URL(f"{BASE_URL}/api/setManualCommandToSend"))][0]
-            payload = req.kwargs.get("json", {})
-            item = payload["linesControl"][0]
-            assert item["action"] == expected_action
-            assert item["time"] == expected_time
-            assert item["manualDuration"] == expected_duration
-
-
-@pytest.mark.asyncio
 async def test_lorawan_sync_failure_logged():
     """Test LoRaWAN sync failure is caught and logged."""
     if aioresponses is None:
@@ -885,7 +878,7 @@ async def test_set_filtration_mode_invalid_program():
 
         bad_program = {"id": "prog_bad"}
         with pytest.raises(IndygoPoolApiClientError, match="programCharacteristics"):
-            await client.async_set_filtration_mode(TEST_MODULE_ID, bad_program, 1)
+            await client.async_set_program_mode(TEST_MODULE_ID, bad_program, 1)
 
 
 # ---------------------------------------------------------------------------
@@ -975,3 +968,59 @@ async def test_get_data_device_status_408_no_crash():
         # temperature from getPoolStatus dict format
         expected_temp_fallback = 24.96
         assert filt_mod.sensors["temperature"].value == expected_temp_fallback
+
+
+VS_PROGRAM = {
+    "id": "prog_vs",
+    "programCharacteristics": {
+        "mode": 2,
+        "programType": 4,
+        "rule": 1,
+        "defaultProgramSpeed": 2,
+        "onSpeed": 2,
+        "frostFreeSpeed": 1,
+    },
+    "windows": [{"start": 900, "end": 1080, "runningDays": 8}],
+}
+
+
+@pytest.mark.asyncio
+async def test_update_program_characteristics_patches_only_given_fields():
+    """Speed and management type changes keep the rest of the program as is."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    with aioresponses() as m:
+        _mock_filtration_endpoints(m)
+
+        async with aiohttp.ClientSession() as session:
+            client = _make_client(session)
+            client._pool_address = TEST_POOL_ADDRESS
+            client._device_short_id = "ABC"
+            client._data = IndygoPoolData(pool_id=TEST_POOL_ID)
+            client._data.modules[TEST_MODULE_ID] = IndygoModuleData(
+                id=TEST_MODULE_ID,
+                type="lr-pc-vs2",
+                name="Pump",
+                programs=[VS_PROGRAM],
+                raw_data={"serialNumber": TEST_SERIAL},
+            )
+
+            await client.async_update_program_characteristics(
+                TEST_MODULE_ID, VS_PROGRAM, defaultProgramSpeed=3, onSpeed=3, rule=0
+            )
+
+            req = m.requests[("PUT", URL(f"{BASE_URL}/api/updatePrograms"))][0]
+            sent = req.kwargs.get("json", {})["programs"][0]
+
+            assert sent["programCharacteristics"] == {
+                "mode": 2,
+                "programType": 4,
+                "rule": 0,
+                "defaultProgramSpeed": 3,
+                "onSpeed": 3,
+                "frostFreeSpeed": 1,
+            }
+            assert sent["windows"] == [{"start": 900, "end": 1080, "runningDays": 8}]
+            assert sent["dataChanged"] is True
+            assert VS_PROGRAM["programCharacteristics"]["rule"] == 1

@@ -30,3 +30,24 @@ PROGRAM_TYPE_LIGHTING = 2
 PROGRAM_MODE_OFF = 0
 PROGRAM_MODE_ON = 1
 PROGRAM_MODE_AUTO = 2
+
+# Variable-speed Pool Command modules (lr-pc-vs2, ...). Plain LR-PC programs
+# carry the same speed fields, so the module type is what tells them apart.
+VARIABLE_SPEED_MODULE_PREFIX = "lr-pc-vs"
+
+# Confirmed on LR-PC-VS2 (#284): the vendor app writes defaultProgramSpeed and
+# onSpeed together (1-3). rule holds the management type on every LR-PC.
+VARIABLE_SPEED_FIELD = "defaultProgramSpeed"
+ON_SPEED_FIELD = "onSpeed"
+RULE_FIELD = "rule"
+
+# programCharacteristics.rule values (management type).
+PROGRAM_RULE_SCHEDULE = 0
+PROGRAM_RULE_THERMO_ADAPTIVE = 1
+PROGRAM_RULE_VARIABLE_SPEED = 2
+
+# Speed the MyIndygo app boosts variable-speed pumps at by default.
+BOOST_DEFAULT_SPEED = 2
+
+# Live speed reported by variable-speed pumps in pool[0].value.
+PUMP_SPEED_STATES = {0: "stopped", 1: "speed_1", 2: "speed_2", 3: "speed_3"}

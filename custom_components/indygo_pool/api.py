@@ -23,6 +23,10 @@ from .parser import IndygoParser
 
 BASE_URL = "https://myindygo.com"
 
+# Manual command actions, from the MyIndygo Android app (URLManual).
+MANUAL_ACTION_STOP = 1
+MANUAL_ACTION_BOOST = 3
+
 # Identify this client honestly on every request.  Without it aiohttp sends its
 # own default ("Python/3.x aiohttp/3.x"), which tells MyIndygo nothing except
 # that an unidentified script is talking to them.  A named client can be
@@ -405,21 +409,23 @@ class IndygoPoolApiClient:
         target_index = target.get("index")
         return target_index is not None and program.get("index") == target_index
 
-    async def async_set_filtration_mode(
-        self, module_id: str, full_program_data: dict, mode: int
-    ) -> None:
-        """Set the filtration mode (Auto/Off/On) safely."""
-        await self.async_set_program_mode(module_id, full_program_data, mode)
-
     async def async_set_program_mode(
         self, module_id: str, full_program_data: dict, mode: int
     ) -> None:
-        """Set the mode (Off/On/Auto) of a single module program.
+        """Set the mode (Off/On/Auto) of a single module program."""
+        await self.async_update_program_characteristics(
+            module_id, full_program_data, mode=mode
+        )
+
+    async def async_update_program_characteristics(
+        self, module_id: str, full_program_data: dict, **changes: Any
+    ) -> None:
+        """Update fields of a single program's programCharacteristics.
 
         Sends the FULL program list back (like the vendor apps) to avoid
         corrupting the device configuration.  Only the targeted program has
-        its mode changed: every other program is sent back carrying its own
-        current mode, which is what the vendor apps do.
+        its characteristics changed: every other program is sent back as is,
+        which is what the vendor apps do.
         """
         program_copy = copy.deepcopy(full_program_data)
 
@@ -427,7 +433,7 @@ class IndygoPoolApiClient:
             raise IndygoPoolApiClientError(
                 "Invalid program data: missing programCharacteristics"
             )
-        program_copy["programCharacteristics"]["mode"] = mode
+        program_copy["programCharacteristics"].update(changes)
         program_copy["dataChanged"] = True
 
         # Collect all programs for this module
@@ -451,8 +457,8 @@ class IndygoPoolApiClient:
             updated_programs.append(program_copy)
 
         LOGGER.debug(
-            "Setting mode %s on program %s of module %s. Sending %d programs.",
-            mode,
+            "Setting %s on program %s of module %s. Sending %d programs.",
+            changes,
             program_copy.get("id") or program_copy.get("index"),
             module_id,
             len(updated_programs),
@@ -490,48 +496,47 @@ class IndygoPoolApiClient:
                 )
 
         except IndygoPoolApiClientError as exc:
-            LOGGER.error("Failed to set program mode: %s", exc)
+            LOGGER.error("Failed to update program: %s", exc)
             raise
 
     # ------------------------------------------------------------------
-    # Remote control  (immediate on/off commands)
+    # Manual commands  (filtration boost)
     # ------------------------------------------------------------------
 
-    async def async_send_remote_control(
-        self,
-        mode: str,
-        module_serial: str | None = None,
-        action: int = 1,
-        **kwargs: Any,
+    async def async_start_boost(
+        self, index: int, hours: int, speed: int | None = None
     ) -> None:
-        """Send an immediate remote control command.
+        """Run the filtration line ``index`` for ``hours`` whatever its program.
 
-        Args:
-            mode: The mode to set ("on", "off", "auto").
-            module_serial: Serial number of the module.
-            action: Action code (1=Stop, 3=Forced March).
-            **kwargs: Additional parameters (e.g. time, manualDuration).
+        ``speed`` only applies to variable-speed pumps.
         """
-        serial = module_serial or self._pool_address
-        if not serial:
-            LOGGER.warning("Missing serial number, skipping remote control")
-            return
-
-        lines_control_item: dict[str, Any] = {
-            "index": 0,
-            "mode": mode,
-            "action": action,
+        command: dict[str, Any] = {
+            "time": f"{hours:02d}:00",
+            "action": MANUAL_ACTION_BOOST,
         }
-        if kwargs:
-            lines_control_item.update(kwargs)
+        if speed is not None:
+            command["speed"] = speed
+        await self._send_line_command(index, command)
 
-        payload = {
-            "moduleSerialNumber": serial,
-            "linesControl": [lines_control_item],
-        }
+    async def async_stop_boost(self, index: int) -> None:
+        """Stop a running boost on the filtration line ``index``."""
+        await self._send_line_command(index, {"action": MANUAL_ACTION_STOP})
 
-        LOGGER.debug("Sending remote control: %s", payload)
-        await self._api_post("/api/setManualCommandToSend", payload)
+    async def _send_line_command(self, index: int, command: dict[str, Any]) -> None:
+        """Send a manual command to a Pool Command line.
+
+        Same route as the MyIndygo Android app (URLManual): the cloud relays
+        it to the Pool Command through the gateway.
+        """
+        if not (self._pool_address and self._device_short_id):
+            raise IndygoPoolApiClientError("Missing gateway or device id")
+
+        payload = {"pool": {"index": index, **command}}
+        LOGGER.debug("Sending manual command: %s", payload)
+        await self._api_post(
+            f"/api/module/{self._pool_address}/manual/{self._device_short_id}",
+            payload,
+        )
 
     async def async_synchronize_lorawan(
         self, module_id: str, send_program: bool = True, send_command: bool = True

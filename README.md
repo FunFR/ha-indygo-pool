@@ -21,9 +21,9 @@ Indygo Pool is a custom integration for Home Assistant that allows you to monito
 - **Redox (ORP)**: Monitor the oxidation-reduction potential of your pool water.
 - **Filter Pressure**: Track filter pressure from Pool Command module inputs.
 - **Electrolyser Status**: Monitor the production status.
-- **Filtration Control**: Switch between Auto, Manual ON, and Manual OFF modes.
+- **Filtration Control**: Switch between Auto, Manual ON, and Manual OFF modes, pick the management type (schedule or thermo-adaptive), and start or stop a boost (2 h to 72 h). Both management types rely on a weekly schedule set up in the MyIndygo app; the variable-speed one (below) does not.
 - **Auxiliary circuits**: Control the devices wired to the Pool Command auxiliary outputs — spotlight, water blade, secondary pump — as switches, reporting the live circuit state published by the board.
-- **Pool Command VS² support**: Compatible with `lr-pc-vs2` hardware variants.
+- **Pool Command VS² support**: Compatible with `lr-pc-vs2` hardware variants. Variable-speed pumps also get the configured speed (V1 to V3) as a select, the variable-speed management type, the boost speed (V2 by default, like the app), and the live pump speed.
 
 ## Installation
 

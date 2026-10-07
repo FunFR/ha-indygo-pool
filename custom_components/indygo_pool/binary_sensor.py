@@ -27,6 +27,8 @@ class IndygoBinarySensorEntityDescription(BinarySensorEntityDescription):
 
     sub_path: str | None = None
     is_pool_status: bool = False
+    # Value parsed into module.sensors (a bool) rather than read from raw data.
+    is_module_sensor: bool = False
     is_inverted: bool = False
 
 
@@ -99,6 +101,12 @@ BINARY_SENSOR_TYPES: tuple[IndygoBinarySensorEntityDescription, ...] = (
         device_class=BinarySensorDeviceClass.RUNNING,
         is_pool_status=True,
     ),
+    IndygoBinarySensorEntityDescription(
+        key="pump_boost",
+        translation_key="pump_boost",
+        icon="mdi:rocket-launch",
+        is_module_sensor=True,
+    ),
 )
 
 
@@ -145,6 +153,16 @@ async def async_setup_entry(
                                 module_id=module_id,
                             )
                         )
+
+        entities.extend(
+            IndygoPoolBinarySensor(
+                coordinator=coordinator,
+                description=desc_map[key],
+                module_id=module_id,
+            )
+            for key in module.sensors
+            if key in desc_map and desc_map[key].is_module_sensor
+        )
 
         # Module-level status sensors (Filtration, etc)
         for index in module.pool_status:
@@ -210,13 +228,19 @@ class IndygoPoolBinarySensor(IndygoPoolEntity, BinarySensorEntity):
                 val = target_status[desc.key].value
                 if val is not None:
                     try:
-                        return float(val) == 1.0
+                        # Variable-speed pumps report the running speed (1-3).
+                        return float(val) > 0
                     except ValueError, TypeError:
                         pass
             return None
 
         if self._module_id in self.coordinator.data.modules:
             module = self.coordinator.data.modules[self._module_id]
+
+            if desc.is_module_sensor:
+                sensor = module.sensors.get(desc.key)
+                return None if sensor is None else bool(sensor.value)
+
             target = module.raw_data
 
             if desc.sub_path:

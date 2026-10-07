@@ -23,7 +23,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import slugify
 
-from .const import DOMAIN
+from .const import DOMAIN, PUMP_SPEED_STATES
 from .coordinator import IndygoPoolDataUpdateCoordinator
 from .entity import IndygoPoolEntity
 from .models import IndygoSensorData
@@ -99,6 +99,13 @@ SENSOR_TYPES: tuple[IndygoSensorEntityDescription, ...] = (
         translation_key="filtration_remaining_time",
         native_unit_of_measurement=UnitOfTime.MINUTES,
         state_class=SensorStateClass.MEASUREMENT,
+    ),
+    IndygoSensorEntityDescription(
+        key="pump_speed",
+        translation_key="pump_speed",
+        device_class=SensorDeviceClass.ENUM,
+        options=list(PUMP_SPEED_STATES.values()),
+        icon="mdi:speedometer",
     ),
 )
 
