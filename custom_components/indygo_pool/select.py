@@ -54,6 +54,11 @@ MANAGEMENT_TO_INT = {
 BOOST_TO_HOURS = {"off": 0} | {f"{h}h": h for h in (2, 4, 8, 12, 24, 36, 48, 72)}
 
 
+def _boost_speed(coordinator: IndygoPoolDataUpdateCoordinator, module_id: str) -> int:
+    """Return the speed the next boost of a variable-speed pump runs at."""
+    return coordinator.boost_speeds.get(module_id, BOOST_DEFAULT_SPEED)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -117,9 +122,7 @@ class IndygoPoolCommandSelect(IndygoPoolEntity, SelectEntity):
             return None
         return data.modules.get(self._module_id)
 
-    async def _async_send(
-        self, module: IndygoModuleData, option: str, value: int
-    ) -> bool:
+    async def _async_send(self, module: IndygoModuleData, value: int) -> bool:
         """Send the command for the selected option; False if impossible."""
         raise NotImplementedError
 
@@ -137,7 +140,7 @@ class IndygoPoolCommandSelect(IndygoPoolEntity, SelectEntity):
             LOGGER.error("Invalid option selected: %s", option)
             return
 
-        if not await self._async_send(module, option, value):
+        if not await self._async_send(module, value):
             return
 
         # Trigger immediate refresh
@@ -201,9 +204,7 @@ class IndygoPoolProgramSelect(IndygoPoolCommandSelect):
             (opt for opt, val in self._option_to_int.items() if val == value), None
         )
 
-    async def _async_send(
-        self, module: IndygoModuleData, option: str, value: int
-    ) -> bool:
+    async def _async_send(self, module: IndygoModuleData, value: int) -> bool:
         """Write the value into every field of the filtration program."""
         if not module.filtration_program:
             LOGGER.error(
@@ -224,47 +225,47 @@ class IndygoPoolProgramSelect(IndygoPoolCommandSelect):
 class IndygoPoolBoostSelect(IndygoPoolCommandSelect):
     """Filtration boost: pick a duration to start it, off to stop it.
 
-    The live status only says whether a boost runs, not its duration, so a
-    running boost shows the duration last picked from Home Assistant.
+    The live status only gives the time left, so a running boost shows the
+    shortest duration covering it, wherever the boost was started from.
     """
 
     _key = "filtration_boost"
     _option_to_int = BOOST_TO_HOURS
     _attr_icon = "mdi:rocket-launch"
 
-    def __init__(
-        self,
-        coordinator: IndygoPoolDataUpdateCoordinator,
-        module_id: str,
-        module_name: str,
-    ) -> None:
-        """Initialize."""
-        super().__init__(coordinator, module_id, module_name)
-        self._picked_option: str | None = None
-
     @property
     def current_option(self) -> str | None:
-        """Return off, or the picked duration while a boost runs."""
+        """Return off, or the duration of the running boost."""
         module = self._get_module()
         boost = module.sensors.get("pump_boost") if module else None
-        if boost is None:
+        if module is None or boost is None:
             return None
-        return self._picked_option if boost.value else "off"
+        if not boost.value:
+            return "off"
+        remaining = module.sensors.get("filtration_remaining_time")
+        if remaining is None or not isinstance(remaining.value, int | float):
+            return None
+        minutes = remaining.value
+        return next(
+            (opt for opt, hours in BOOST_TO_HOURS.items() if hours * 60 >= minutes),
+            None,
+        )
 
-    async def _async_send(
-        self, module: IndygoModuleData, option: str, value: int
-    ) -> bool:
+    async def _async_send(self, module: IndygoModuleData, value: int) -> bool:
         """Start a boost of ``value`` hours, or stop it when 0."""
+        if module.filtration_program not in module.programs:
+            LOGGER.error("Cannot set %s: no filtration line", self._key)
+            return False
+
+        # The app addresses the filtration line by its program position.
+        index = module.programs.index(module.filtration_program)
         if value:
-            speed = (
-                self.coordinator.boost_speeds.get(module.id, BOOST_DEFAULT_SPEED)
-                if module.has_variable_speed
-                else None
+            speed = _boost_speed(self.coordinator, module.id)
+            await self.coordinator.client.async_start_boost(
+                index, value, speed if module.has_variable_speed else None
             )
-            await self.coordinator.client.async_start_boost(value, speed)
         else:
-            await self.coordinator.client.async_stop_boost()
-        self._picked_option = option
+            await self.coordinator.client.async_stop_boost(index)
         return True
 
 
@@ -343,10 +344,9 @@ class IndygoPoolBoostSpeedSelect(IndygoPoolEntity, SelectEntity, RestoreEntity):
     @property
     def current_option(self) -> str | None:
         """Return the picked boost speed."""
-        speed = self.coordinator.boost_speeds.get(
-            self._module_id or "", BOOST_DEFAULT_SPEED
+        return PUMP_SPEED_STATES.get(
+            _boost_speed(self.coordinator, self._module_id or "")
         )
-        return PUMP_SPEED_STATES.get(speed)
 
     async def async_added_to_hass(self) -> None:
         """Restore the speed picked before the restart."""

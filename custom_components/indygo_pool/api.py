@@ -503,8 +503,10 @@ class IndygoPoolApiClient:
     # Manual commands  (filtration boost)
     # ------------------------------------------------------------------
 
-    async def async_start_boost(self, hours: int, speed: int | None = None) -> None:
-        """Run the filtration for ``hours`` regardless of its program.
+    async def async_start_boost(
+        self, index: int, hours: int, speed: int | None = None
+    ) -> None:
+        """Run the filtration line ``index`` for ``hours`` whatever its program.
 
         ``speed`` only applies to variable-speed pumps.
         """
@@ -514,14 +516,14 @@ class IndygoPoolApiClient:
         }
         if speed is not None:
             command["speed"] = speed
-        await self._send_filtration_command(command)
+        await self._send_line_command(index, command)
 
-    async def async_stop_boost(self) -> None:
-        """Stop a running filtration boost."""
-        await self._send_filtration_command({"action": MANUAL_ACTION_STOP})
+    async def async_stop_boost(self, index: int) -> None:
+        """Stop a running boost on the filtration line ``index``."""
+        await self._send_line_command(index, {"action": MANUAL_ACTION_STOP})
 
-    async def _send_filtration_command(self, command: dict) -> None:
-        """Send a manual command to the filtration line.
+    async def _send_line_command(self, index: int, command: dict[str, Any]) -> None:
+        """Send a manual command to a Pool Command line.
 
         Same route as the MyIndygo Android app (URLManual): the cloud relays
         it to the Pool Command through the gateway.
@@ -529,7 +531,7 @@ class IndygoPoolApiClient:
         if not (self._pool_address and self._device_short_id):
             raise IndygoPoolApiClientError("Missing gateway or device id")
 
-        payload = {"pool": {"index": 0, **command}}
+        payload = {"pool": {"index": index, **command}}
         LOGGER.debug("Sending manual command: %s", payload)
         await self._api_post(
             f"/api/module/{self._pool_address}/manual/{self._device_short_id}",

@@ -483,7 +483,7 @@ async def test_start_boost():
     if aioresponses is None:
         pytest.skip("aioresponses not installed")
 
-    payload = await _send_boost_command("async_start_boost", 2)
+    payload = await _send_boost_command("async_start_boost", 0, 2)
 
     assert payload == {"pool": {"index": 0, "time": "02:00", "action": 3}}
 
@@ -494,7 +494,7 @@ async def test_start_boost_at_speed():
     if aioresponses is None:
         pytest.skip("aioresponses not installed")
 
-    payload = await _send_boost_command("async_start_boost", 2, 3)
+    payload = await _send_boost_command("async_start_boost", 0, 2, 3)
 
     assert payload == {"pool": {"index": 0, "time": "02:00", "action": 3, "speed": 3}}
 
@@ -505,7 +505,7 @@ async def test_start_boost_beyond_a_day():
     if aioresponses is None:
         pytest.skip("aioresponses not installed")
 
-    payload = await _send_boost_command("async_start_boost", 72)
+    payload = await _send_boost_command("async_start_boost", 0, 72)
 
     assert payload["pool"]["time"] == "72:00"
 
@@ -516,9 +516,9 @@ async def test_stop_boost():
     if aioresponses is None:
         pytest.skip("aioresponses not installed")
 
-    payload = await _send_boost_command("async_stop_boost")
+    payload = await _send_boost_command("async_stop_boost", 1)
 
-    assert payload == {"pool": {"index": 0, "action": 1}}
+    assert payload == {"pool": {"index": 1, "action": 1}}
 
 
 @pytest.mark.asyncio
@@ -528,7 +528,7 @@ async def test_boost_without_hardware_ids_raises():
         client = _make_client(session)
 
         with pytest.raises(IndygoPoolApiClientError):
-            await client.async_stop_boost()
+            await client.async_stop_boost(0)
 
 
 # ---------------------------------------------------------------------------

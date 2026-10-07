@@ -453,13 +453,19 @@ class TestVariableSpeedSelects:
 
 @pytest.fixture
 def boost_coordinator(mock_coordinator):
-    """Coordinator holding a Pool Command whose live status shows no boost."""
+    """Coordinator holding a Pool Command whose live status shows no boost.
+
+    Its filtration program comes second, after the spotlight one.
+    """
+    filtration = {"index": 0, "programCharacteristics": {"mode": 2, "programType": 4}}
+    spotlight = {"index": 1, "programCharacteristics": {"mode": 0, "programType": 2}}
     mock_coordinator.data.modules = {
         "mod1": IndygoModuleData(
             id="mod1",
             type="lr-pc",
             name="Pump",
-            filtration_program={"programCharacteristics": {"mode": 2}},
+            programs=[spotlight, filtration],
+            filtration_program=filtration,
             sensors={"pump_boost": IndygoSensorData(key="pump_boost", value=False)},
         )
     }
@@ -494,26 +500,33 @@ class TestBoostSelect:
 
     @pytest.mark.asyncio
     async def test_start(self, boost_coordinator):
-        """Picking a duration starts a boost of that many hours."""
+        """Picking a duration boosts the filtration line, like the app."""
         entity = IndygoPoolBoostSelect(boost_coordinator, "mod1", "Pump")
 
         with patch("custom_components.indygo_pool.select.async_call_later"):
             await entity.async_select_option("36h")
 
-        boost_coordinator.client.async_start_boost.assert_awaited_once_with(36, None)
+        boost_coordinator.client.async_start_boost.assert_awaited_once_with(1, 36, None)
         boost_coordinator.async_request_refresh.assert_awaited_once()
 
-    @pytest.mark.asyncio
-    async def test_running_boost_shows_the_picked_duration(self, boost_coordinator):
-        """The API does not return the duration, so the last pick is shown."""
+    @pytest.mark.parametrize(
+        ("remaining", "expected"), [(240, "4h"), (110, "2h"), (1500, "36h")]
+    )
+    def test_running_boost_shows_its_duration(
+        self, boost_coordinator, remaining, expected
+    ):
+        """The API only gives the time left, rounded up to the app durations.
+
+        This also covers boosts started from the app or before a restart.
+        """
+        module = boost_coordinator.data.modules["mod1"]
+        module.sensors["pump_boost"].value = True
+        module.sensors["filtration_remaining_time"] = IndygoSensorData(
+            key="filtration_remaining_time", value=remaining
+        )
         entity = IndygoPoolBoostSelect(boost_coordinator, "mod1", "Pump")
-        boost_coordinator.data.modules["mod1"].sensors["pump_boost"].value = True
-        assert entity.current_option is None
 
-        with patch("custom_components.indygo_pool.select.async_call_later"):
-            await entity.async_select_option("4h")
-
-        assert entity.current_option == "4h"
+        assert entity.current_option == expected
 
     @pytest.mark.asyncio
     async def test_stop(self, boost_coordinator):
@@ -523,7 +536,7 @@ class TestBoostSelect:
         with patch("custom_components.indygo_pool.select.async_call_later"):
             await entity.async_select_option("off")
 
-        boost_coordinator.client.async_stop_boost.assert_awaited_once_with()
+        boost_coordinator.client.async_stop_boost.assert_awaited_once_with(1)
 
     @pytest.mark.asyncio
     async def test_setup_adds_boost_for_pool_command(self, boost_coordinator):
@@ -569,7 +582,7 @@ class TestBoostSpeed:
             await boost.async_select_option("2h")
 
         assert speed.current_option == "speed_3"
-        vs_boost_coordinator.client.async_start_boost.assert_awaited_once_with(2, 3)
+        vs_boost_coordinator.client.async_start_boost.assert_awaited_once_with(1, 2, 3)
 
     @pytest.mark.asyncio
     async def test_boost_defaults_to_v2_on_vs(self, vs_boost_coordinator):
@@ -579,7 +592,7 @@ class TestBoostSpeed:
         with patch("custom_components.indygo_pool.select.async_call_later"):
             await boost.async_select_option("2h")
 
-        vs_boost_coordinator.client.async_start_boost.assert_awaited_once_with(2, 2)
+        vs_boost_coordinator.client.async_start_boost.assert_awaited_once_with(1, 2, 2)
 
     @pytest.mark.asyncio
     async def test_restores_last_speed(self, vs_boost_coordinator):
@@ -614,3 +627,22 @@ class TestBoostSpeed:
         unique_ids = {e.unique_id for e in async_add_entities.call_args[0][0]}
         assert "test_pool_id_mod1_boost_speed" in unique_ids
         assert "test_pool_id_pc_boost_speed" not in unique_ids
+
+
+def test_running_boost_without_time_left_is_unknown(boost_coordinator):
+    """Without the remaining time the duration cannot be told."""
+    boost_coordinator.data.modules["mod1"].sensors["pump_boost"].value = True
+    entity = IndygoPoolBoostSelect(boost_coordinator, "mod1", "Pump")
+
+    assert entity.current_option is None
+
+
+@pytest.mark.asyncio
+async def test_boost_without_filtration_line_sends_nothing(boost_coordinator):
+    """The boost targets the filtration line; without it nothing is sent."""
+    boost_coordinator.data.modules["mod1"].programs = []
+    entity = IndygoPoolBoostSelect(boost_coordinator, "mod1", "Pump")
+
+    await entity.async_select_option("2h")
+
+    boost_coordinator.client.async_start_boost.assert_not_called()
