@@ -11,13 +11,20 @@ from __future__ import annotations
 import asyncio
 import base64
 import copy
+import logging
 import time
 from http import HTTPStatus
 from typing import Any, cast
 
 import aiohttp
 
-from .const import LOGGER, VERSION
+from .const import (
+    LOGGER,
+    SINGLE_SPEED_DEFAULT_SEQUENCE,
+    VARIABLE_SPEED_DEFAULT_SEQUENCE,
+    VERSION,
+)
+from .device_program import build_device_program
 from .models import IndygoPoolData
 from .parser import IndygoParser
 
@@ -417,6 +424,30 @@ class IndygoPoolApiClient:
             module_id, full_program_data, mode=mode
         )
 
+    def _log_device_frame(self, module_id: str, program: dict) -> None:
+        """Log the frame the vendor app would send to the module (never sent).
+
+        Lets a reporter's debug log be compared with the program actually
+        pushed, until the app format is validated on real hardware.
+        """
+        module = self._data.modules.get(module_id) if self._data else None
+        if module is None or not LOGGER.isEnabledFor(logging.DEBUG):
+            return
+        try:
+            frame = build_device_program(
+                program,
+                frost_free_enabled=bool(module.raw_data.get("isFrostFreeEnabled")),
+                default_speed_sequence=(
+                    VARIABLE_SPEED_DEFAULT_SEQUENCE
+                    if module.has_variable_speed
+                    else SINGLE_SPEED_DEFAULT_SEQUENCE
+                ),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            LOGGER.debug("No vendor app frame for program: %s", exc)
+            return
+        LOGGER.debug("Vendor app frame for program (not sent): %s", frame)
+
     async def async_update_program_characteristics(
         self, module_id: str, full_program_data: dict, **changes: Any
     ) -> None:
@@ -463,6 +494,8 @@ class IndygoPoolApiClient:
             module_id,
             len(updated_programs),
         )
+
+        self._log_device_frame(module_id, program_copy)
 
         try:
             # 1. Update programs in cloud database
