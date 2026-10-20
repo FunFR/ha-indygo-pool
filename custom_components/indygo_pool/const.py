@@ -46,9 +46,8 @@ PROGRAM_RULE_SCHEDULE = 0
 PROGRAM_RULE_THERMO_ADAPTIVE = 1
 PROGRAM_RULE_VARIABLE_SPEED = 2
 
-# Speed sequence the app writes when the module reports none
-# (Product.pumpDefaultSpeedSequence): 63280 for the LR-PC-VS2 (type 73), 29456
-# for the other variable-speed types (42, 48), 4368 for single speed.
+# Speed sequence the app writes when the module reports none: 63280 for the
+# LR-PC-VS2, 29456 for other variable-speed models, 4368 for single speed.
 VARIABLE_SPEED_DEFAULT_SEQUENCE = 63280
 SINGLE_SPEED_DEFAULT_SEQUENCE = 4368
 

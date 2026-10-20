@@ -479,7 +479,7 @@ async def _send_boost_command(method: str, *args: int) -> dict:
 
 @pytest.mark.asyncio
 async def test_start_boost():
-    """Same command as the MyIndygo Android app (ManualBoostActivity)."""
+    """Same command as the MyIndygo app."""
     if aioresponses is None:
         pytest.skip("aioresponses not installed")
 

@@ -1,8 +1,7 @@
 """Build the program frame the MyIndygo app sends to a Pool Command module.
 
-Mirrors ``URLPrograms.writePoolProgram`` of the Android app (3.17.1): the cloud
-stores programs with long keys, the app writes them to the module with short
-ones.
+The cloud stores programs with long keys, the MyIndygo app writes them to the
+module with short ones.
 """
 
 from __future__ import annotations

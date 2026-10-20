@@ -31,7 +31,7 @@ from .parser import IndygoParser
 
 BASE_URL = "https://myindygo.com"
 
-# Manual command actions, from the MyIndygo Android app (URLManual).
+# Manual command actions, as sent by the MyIndygo app.
 MANUAL_ACTION_STOP = 1
 MANUAL_ACTION_BOOST = 3
 
@@ -584,7 +584,7 @@ class IndygoPoolApiClient:
     async def _send_line_command(self, index: int, command: dict[str, Any]) -> None:
         """Send a manual command to a Pool Command line.
 
-        Same route as the MyIndygo Android app (URLManual): the cloud relays
+        Same route as the MyIndygo app: the cloud relays
         it to the Pool Command through the gateway.
         """
         if not (self._pool_address and self._device_short_id):
