@@ -1024,3 +1024,64 @@ async def test_update_program_characteristics_patches_only_given_fields():
             assert sent["windows"] == [{"start": 900, "end": 1080, "runningDays": 8}]
             assert sent["dataChanged"] is True
             assert VS_PROGRAM["programCharacteristics"]["rule"] == 1
+
+
+def _program_client() -> IndygoPoolApiClient:
+    """Client holding three programs, the way a Pool Command module reports them."""
+    client = _make_client(aiohttp.ClientSession())
+    client._pool_address = TEST_POOL_ADDRESS
+    client._device_short_id = "ABC"
+    client._data = IndygoPoolData(pool_id=TEST_POOL_ID)
+    client._data.modules[TEST_MODULE_ID] = IndygoModuleData(
+        id=TEST_MODULE_ID,
+        type="lr-pc",
+        name="Pump",
+        programs=[
+            FILT_PROGRAM,
+            {"id": "prog_2", "programCharacteristics": {"mode": 0}},
+            {"programCharacteristics": {"mode": 0}},
+        ],
+        raw_data={"serialNumber": TEST_SERIAL},
+    )
+    return client
+
+
+@pytest.mark.asyncio
+async def test_report_programs_sent_carries_program_ids_only():
+    """Like the vendor app, the "sent" report lists program ids, not bodies."""
+    with aioresponses() as m:
+        _mock_filtration_endpoints(m)
+        client = _program_client()
+        try:
+            await client.async_set_program_mode(TEST_MODULE_ID, FILT_PROGRAM, 2)
+        finally:
+            await client._session.close()
+
+        report = m.requests[("POST", URL(f"{BASE_URL}/api/reportProgramsDatasSent"))]
+        assert report[0].kwargs["json"] == {
+            "module": TEST_MODULE_ID,
+            "programs": ["prog_1", "prog_2"],
+        }
+
+
+@pytest.mark.asyncio
+async def test_device_push_error_body_skips_sent_reports():
+    """An ``error`` in the push answer means the module did not get the programs."""
+    with aioresponses() as m:
+        m.put(f"{BASE_URL}/api/updatePrograms", payload={"status": "ok"})
+        m.post(
+            f"{BASE_URL}/api/module/{TEST_POOL_ADDRESS}/programs/ABC",
+            payload={"error": "module unreachable"},
+        )
+        client = _program_client()
+        try:
+            with pytest.raises(IndygoPoolApiClientError):
+                await client.async_set_program_mode(TEST_MODULE_ID, FILT_PROGRAM, 2)
+        finally:
+            await client._session.close()
+
+        assert ("POST", URL(f"{BASE_URL}/api/reportModuleDatasSent")) not in m.requests
+        assert (
+            "POST",
+            URL(f"{BASE_URL}/api/reportProgramsDatasSent"),
+        ) not in m.requests
