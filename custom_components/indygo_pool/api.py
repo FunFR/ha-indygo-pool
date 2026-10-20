@@ -476,13 +476,22 @@ class IndygoPoolApiClient:
                 url = (
                     f"/api/module/{self._pool_address}/programs/{self._device_short_id}"
                 )
-                await self._api_post(url, {"programs": updated_programs})
+                answer = await self._api_post(url, {"programs": updated_programs})
+                # The vendor app treats any ``error`` key as a failed write and
+                # only reports the programs as sent once the module got them.
+                if isinstance(answer, dict) and "error" in answer:
+                    raise IndygoPoolApiClientError(
+                        f"Module rejected the programs: {answer['error']}"
+                    )
 
-            # 3. Report data sent
+            # 3. Report data sent (program ids only, like the vendor app)
             await self._api_post("/api/reportModuleDatasSent", {"module": module_id})
             await self._api_post(
                 "/api/reportProgramsDatasSent",
-                {"module": module_id, "programs": updated_programs},
+                {
+                    "module": module_id,
+                    "programs": [p["id"] for p in updated_programs if p.get("id")],
+                },
             )
 
             # 4. LoRaWAN sync for V2 modules
