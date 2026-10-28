@@ -38,6 +38,21 @@ def _value(characteristics: dict[str, Any], key: str, default: int) -> int:
     return default if value is None or value == -1 else int(value)
 
 
+def module_speed_keys(characteristics: dict[str, Any]) -> dict[str, int]:
+    """Return the speeds stored in the module's own keys, skipping unset ones."""
+    keys = {
+        "spPg": "defaultProgramSpeed",
+        "spON": "onSpeed",
+        "spFF": "frostFreeSpeed",
+        "spSeq": "speedSequence",
+    }
+    return {
+        short: int(characteristics[long])
+        for short, long in keys.items()
+        if characteristics.get(long) not in (None, -1)
+    }
+
+
 def _is_window_active(window: dict[str, Any], minute: int) -> bool:
     """Return True when the window runs at ``minute`` of the day.
 

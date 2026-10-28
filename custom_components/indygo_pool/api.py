@@ -20,11 +20,12 @@ import aiohttp
 
 from .const import (
     LOGGER,
+    PROGRAM_TYPE_FILTRATION,
     SINGLE_SPEED_DEFAULT_SEQUENCE,
     VARIABLE_SPEED_DEFAULT_SEQUENCE,
     VERSION,
 )
-from .device_program import build_device_program
+from .device_program import build_device_program, module_speed_keys
 from .models import IndygoPoolData
 from .parser import IndygoParser
 
@@ -448,6 +449,20 @@ class IndygoPoolApiClient:
             return
         LOGGER.debug("Vendor app frame for program (not sent): %s", frame)
 
+    @staticmethod
+    def _with_module_speed_keys(programs: list[dict]) -> list[dict]:
+        """Copy the programs, adding the speed keys the module reads.
+
+        The module stores speeds under ``spPg``, ``spON``, ``spFF`` and
+        ``spSeq``, which the cloud documents do not carry.
+        """
+        pushed = copy.deepcopy(programs)
+        for program in pushed:
+            chars = program.get("programCharacteristics", {})
+            if chars.get("programType") == PROGRAM_TYPE_FILTRATION:
+                chars.update(module_speed_keys(chars))
+        return pushed
+
     async def async_update_program_characteristics(
         self, module_id: str, full_program_data: dict, **changes: Any
     ) -> None:
@@ -509,7 +524,9 @@ class IndygoPoolApiClient:
                 url = (
                     f"/api/module/{self._pool_address}/programs/{self._device_short_id}"
                 )
-                answer = await self._api_post(url, {"programs": updated_programs})
+                answer = await self._api_post(
+                    url, {"programs": self._with_module_speed_keys(updated_programs)}
+                )
                 # The vendor app treats any ``error`` key as a failed write and
                 # only reports the programs as sent once the module got them.
                 if isinstance(answer, dict) and "error" in answer:
