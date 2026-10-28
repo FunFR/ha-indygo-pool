@@ -36,7 +36,17 @@ jobs:
       - name: Scan dev dependencies for known vulnerabilities
         run: |
           uv export --only-group dev --no-hashes --no-emit-project -o requirements-audit.txt
-          uv run pip-audit -r requirements-audit.txt --disable-pip --no-deps
+          # aiohttp 3.14.3 is pinned by homeassistant 2026.9.x; the fix needs HA 2026.10
+          # (probatio migration). Dev-only: at runtime the integration uses HA's aiohttp.
+          uv run pip-audit -r requirements-audit.txt --disable-pip --no-deps \
+            --ignore-vuln CVE-2026-111064 \
+            --ignore-vuln GHSA-2g87-pp6c-29x5 \
+            --ignore-vuln CVE-2026-111063 \
+            --ignore-vuln CVE-2026-111750 \
+            --ignore-vuln CVE-2026-111066 \
+            --ignore-vuln CVE-2026-111749 \
+            --ignore-vuln CVE-2026-111065 \
+            --ignore-vuln CVE-2026-111748
       - name: Run tests with coverage
         run: uv run pytest -m "not integration"
       - name: Determine declared requires-python floor
