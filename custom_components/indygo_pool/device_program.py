@@ -55,7 +55,7 @@ def module_speed_keys(characteristics: dict[str, Any]) -> dict[str, int]:
 def _is_window_active(window: dict[str, Any], minute: int) -> bool:
     """Return True when the window runs at ``minute`` of the day.
 
-    Mirrors ``isWindowActiveAtTime``: an ``on``/``off`` pair makes the window
+    An ``on``/``off`` pair makes the window
     cycle, and an overnight window (end before start) wraps past midnight.
     """
     start, end = window["start"], window["end"]
