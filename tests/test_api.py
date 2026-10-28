@@ -1026,7 +1026,7 @@ async def test_update_program_characteristics_patches_only_given_fields():
             assert VS_PROGRAM["programCharacteristics"]["rule"] == 1
 
 
-def _program_client() -> IndygoPoolApiClient:
+def _program_client(filtration: dict | None = None) -> IndygoPoolApiClient:
     """Client holding three programs, the way a Pool Command module reports them."""
     client = _make_client(aiohttp.ClientSession())
     client._pool_address = TEST_POOL_ADDRESS
@@ -1037,7 +1037,7 @@ def _program_client() -> IndygoPoolApiClient:
         type="lr-pc",
         name="Pump",
         programs=[
-            FILT_PROGRAM,
+            filtration or FILT_PROGRAM,
             {"id": "prog_2", "programCharacteristics": {"mode": 0}},
             {"programCharacteristics": {"mode": 0}},
         ],
@@ -1085,3 +1085,43 @@ async def test_device_push_error_body_skips_sent_reports():
             "POST",
             URL(f"{BASE_URL}/api/reportProgramsDatasSent"),
         ) not in m.requests
+
+
+@pytest.mark.asyncio
+async def test_device_push_carries_module_speed_keys_on_pump_program():
+    """The module reads its speeds from ``spPg``, ``spON``, ``spFF`` and ``spSeq``."""
+    program = {
+        **VS_PROGRAM,
+        "programCharacteristics": {
+            **VS_PROGRAM["programCharacteristics"],
+            "speedSequence": 38192,
+        },
+    }
+    with aioresponses() as m:
+        _mock_filtration_endpoints(m)
+        client = _program_client(program)
+        try:
+            await client.async_update_program_characteristics(
+                TEST_MODULE_ID, program, defaultProgramSpeed=3
+            )
+        finally:
+            await client._session.close()
+
+        push = m.requests[
+            ("POST", URL(f"{BASE_URL}/api/module/{TEST_POOL_ADDRESS}/programs/ABC"))
+        ][0].kwargs["json"]["programs"]
+        module_keys = {"spPg", "spON", "spFF", "spSeq"}
+        pump = push[0]["programCharacteristics"]
+        assert (pump["spPg"], pump["spON"], pump["spFF"], pump["spSeq"]) == (
+            3,
+            2,
+            1,
+            38192,
+        )
+        assert pump["defaultProgramSpeed"] == pump["spPg"]
+        assert not module_keys & push[1]["programCharacteristics"].keys()
+
+        stored = m.requests[("PUT", URL(f"{BASE_URL}/api/updatePrograms"))][0].kwargs[
+            "json"
+        ]["programs"][0]["programCharacteristics"]
+        assert not module_keys & stored.keys()
