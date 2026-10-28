@@ -65,7 +65,7 @@ class IndygoPoolFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=probatio.Schema(
                 {
                     probatio.Required(CONF_EMAIL): str,
-                    probatio.Required(CONF_PASSWORD): str,
+                    probatio.Required(probatio.Secret(CONF_PASSWORD)): str,
                     probatio.Required(CONF_POOL_ID): str,
                 }
             ),
@@ -99,7 +99,9 @@ class IndygoPoolFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="reauth_confirm",
-            data_schema=probatio.Schema({probatio.Required(CONF_PASSWORD): str}),
+            data_schema=probatio.Schema(
+                {probatio.Required(probatio.Secret(CONF_PASSWORD)): str}
+            ),
             errors=errors,
             description_placeholders={CONF_EMAIL: reauth_entry.data[CONF_EMAIL]},
         )
@@ -137,7 +139,7 @@ class IndygoPoolFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=probatio.Schema(
                 {
                     probatio.Required(CONF_EMAIL, default=entry.data[CONF_EMAIL]): str,
-                    probatio.Required(CONF_PASSWORD): str,
+                    probatio.Required(probatio.Secret(CONF_PASSWORD)): str,
                     probatio.Required(
                         CONF_POOL_ID, default=entry.data[CONF_POOL_ID]
                     ): str,

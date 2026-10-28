@@ -3,10 +3,12 @@
 import pathlib
 from unittest.mock import AsyncMock, patch
 
+import probatio
 import pytest
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+from probatio.humanize import humanize_error
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.indygo_pool.api import (
@@ -418,3 +420,45 @@ async def test_options_flow_changed_interval_reloads_entry(
     assert result2["type"] == FlowResultType.CREATE_ENTRY
     assert entry.options[CONF_SCAN_INTERVAL] == CUSTOM_SCAN_INTERVAL
     mock_schedule_reload.assert_called_once_with(entry.entry_id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source", ["user", "reauth", "reconfigure"])
+async def test_password_value_is_redacted_in_validation_errors(
+    hass: HomeAssistant, source: str
+) -> None:
+    """A rejected password must not be echoed back in the validation error."""
+    wrong_password = 123456789
+    if source == "user":
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+    else:
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="test_email",
+            data={
+                CONF_EMAIL: "test_email",
+                CONF_PASSWORD: "old_password",
+                CONF_POOL_ID: "test_pool",
+            },
+            unique_id="test_pool",
+        )
+        entry.add_to_hass(hass)
+        result = await (
+            entry.start_reauth_flow(hass)
+            if source == "reauth"
+            else entry.start_reconfigure_flow(hass)
+        )
+
+    candidate = {
+        CONF_EMAIL: "test_email",
+        CONF_PASSWORD: wrong_password,
+        CONF_POOL_ID: "test_pool",
+    }
+    with pytest.raises(probatio.Invalid) as error:
+        result["data_schema"](candidate)
+
+    message = humanize_error(candidate, error.value)
+    assert "password" in message
+    assert str(wrong_password) not in message
