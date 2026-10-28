@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-import voluptuous as vol
+import probatio
 from homeassistant import config_entries
 from homeassistant.const import UnitOfTime
 from homeassistant.core import callback
@@ -62,11 +62,11 @@ class IndygoPoolFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="user",
-            data_schema=vol.Schema(
+            data_schema=probatio.Schema(
                 {
-                    vol.Required(CONF_EMAIL): str,
-                    vol.Required(CONF_PASSWORD): str,
-                    vol.Required(CONF_POOL_ID): str,
+                    probatio.Required(CONF_EMAIL): str,
+                    probatio.Required(CONF_PASSWORD): str,
+                    probatio.Required(CONF_POOL_ID): str,
                 }
             ),
             errors=errors,
@@ -99,7 +99,7 @@ class IndygoPoolFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="reauth_confirm",
-            data_schema=vol.Schema({vol.Required(CONF_PASSWORD): str}),
+            data_schema=probatio.Schema({probatio.Required(CONF_PASSWORD): str}),
             errors=errors,
             description_placeholders={CONF_EMAIL: reauth_entry.data[CONF_EMAIL]},
         )
@@ -134,11 +134,13 @@ class IndygoPoolFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="reconfigure",
-            data_schema=vol.Schema(
+            data_schema=probatio.Schema(
                 {
-                    vol.Required(CONF_EMAIL, default=entry.data[CONF_EMAIL]): str,
-                    vol.Required(CONF_PASSWORD): str,
-                    vol.Required(CONF_POOL_ID, default=entry.data[CONF_POOL_ID]): str,
+                    probatio.Required(CONF_EMAIL, default=entry.data[CONF_EMAIL]): str,
+                    probatio.Required(CONF_PASSWORD): str,
+                    probatio.Required(
+                        CONF_POOL_ID, default=entry.data[CONF_POOL_ID]
+                    ): str,
                 }
             ),
             errors=errors,
@@ -203,9 +205,9 @@ class IndygoPoolOptionsFlowHandler(config_entries.OptionsFlowWithReload):
 
         return self.async_show_form(
             step_id="init",
-            data_schema=vol.Schema(
+            data_schema=probatio.Schema(
                 {
-                    vol.Required(
+                    probatio.Required(
                         CONF_SCAN_INTERVAL,
                         default=self.config_entry.options.get(
                             CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL

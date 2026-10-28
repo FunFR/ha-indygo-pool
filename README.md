@@ -27,7 +27,7 @@ Indygo Pool is a custom integration for Home Assistant that allows you to monito
 
 ## Installation
 
-Requires Home Assistant 2026.8.0 or later.
+Requires Home Assistant 2026.9.0 or later.
 
 ### HACS (Recommended)
 
