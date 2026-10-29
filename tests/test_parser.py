@@ -1032,3 +1032,35 @@ class TestVariableSpeedPump:
 
         assert "pump_speed" not in module.sensors
         assert module.sensors["pump_boost"].value is False
+
+
+class TestCoverState:
+    """The cover wired to the Pool Command is reported by the pool status."""
+
+    def _parse(self, extra: dict):
+        json_data = {
+            "modules": [{"id": "PC", "type": "lr-pc", "name": "LRPC"}],
+            **extra,
+        }
+        return IndygoParser().parse_data(json_data, "P1", "A1", "R1").modules["PC"]
+
+    def test_opened(self):
+        """Value 0 is an open cover, as in the MyIndygo dashboard."""
+        assert self._parse({"shutterState": 0}).sensors["cover_open"].value is True
+
+    def test_closed(self):
+        """Any non-zero value is a closed cover."""
+        assert self._parse({"shutterState": 1}).sensors["cover_open"].value is False
+
+    def test_absent(self):
+        """Pools without a cover input expose no cover sensor."""
+        assert "cover_open" not in self._parse({}).sensors
+
+    def test_non_numeric_ignored(self):
+        """An unexpected payload type leaves the sensor out instead of failing."""
+        assert "cover_open" not in self._parse({"shutterState": "0"}).sensors
+
+    def test_without_module(self):
+        """No Pool Command module: nothing to attach the sensor to."""
+        data = IndygoParser().parse_data({"shutterState": 0}, "P1", "A1", "R1")
+        assert "cover_open" not in data.sensors
