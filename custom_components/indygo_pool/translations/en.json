@@ -97,9 +97,6 @@
             "is_online": {
                 "name": "Online"
             },
-            "cover": {
-                "name": "Cover open"
-            },
             "shutter": {
                 "name": "Shutter"
             },
