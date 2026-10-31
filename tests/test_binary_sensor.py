@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from homeassistant.components.binary_sensor import BinarySensorDeviceClass
 
 from custom_components.indygo_pool.binary_sensor import (
     IndygoBinarySensorEntityDescription,
@@ -296,3 +297,31 @@ async def test_pump_boost(mock_coordinator, boosting):
     (entity,) = async_add_entities.call_args[0][0]
     assert entity.unique_id == "test_pool_id_vs_pump_boost"
     assert entity.is_on is boosting
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("is_open", [True, False])
+async def test_pool_command_shutter(mock_coordinator, is_open):
+    """The Pool Command shutter is a window sensor on that module."""
+    mock_hass = MagicMock()
+    mock_entry = MagicMock()
+    mock_hass.data = {"indygo_pool": {mock_entry.entry_id: mock_coordinator}}
+    mock_coordinator.data.modules = {
+        "pc": IndygoModuleData(
+            id="pc",
+            name="LRPC",
+            type="lr-pc",
+            sensors={
+                "shutterState": IndygoSensorData(key="shutterState", value=is_open)
+            },
+        )
+    }
+    async_add_entities = MagicMock()
+
+    await async_setup_entry(mock_hass, mock_entry, async_add_entities)
+
+    (entity,) = async_add_entities.call_args[0][0]
+    assert entity.unique_id == "test_pool_id_pc_shutterState"
+    assert entity.translation_key == "shutter"
+    assert entity.device_class == BinarySensorDeviceClass.WINDOW
+    assert entity.is_on is is_open

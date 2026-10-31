@@ -161,7 +161,7 @@ class IndygoParser:
         # 3. Main Pool Data — resolve filtration module once
         filt_module = self._find_filtration_module(pool_data)
         self._parse_root_sensors(json_data, pool_data, filt_module)
-        self._parse_cover_state(json_data, filt_module)
+        self._parse_shutter_state(json_data, pool_data)
         self._parse_sensor_state(json_data, pool_data, filt_module)
         self._parse_pool_status_list(json_data, pool_data, filt_module)
 
@@ -389,19 +389,22 @@ class IndygoParser:
                 extra_attributes=extra_attributes,
             )
 
-    @staticmethod
-    def _parse_cover_state(
-        json_data: dict, filt_module: IndygoModuleData | None
-    ) -> None:
-        """Parse the cover input of the Pool Command (0 is open, else closed).
+    @classmethod
+    def _parse_shutter_state(cls, json_data: dict, pool_data: IndygoPoolData) -> None:
+        """Parse the shutter input of the Pool Command (0 is open, else closed).
 
-        Unlike the IPX shutterEntry, it follows a cover wired to the Pool
+        Unlike the IPX shutterEntry, it follows a shutter wired to the Pool
         Command and matches the MyIndygo dashboard.
         """
         state = json_data.get("shutterState")
-        if filt_module is None or not isinstance(state, int | float):
+        if isinstance(state, bool) or not isinstance(state, int | float):
             return
-        filt_module.sensors["shutterState"] = IndygoSensorData(
+        lr_pc = next(
+            (m for m in pool_data.modules.values() if cls._is_lr_pc_module(m)), None
+        )
+        if lr_pc is None:
+            return
+        lr_pc.sensors["shutterState"] = IndygoSensorData(
             key="shutterState", value=state == 0
         )
 
