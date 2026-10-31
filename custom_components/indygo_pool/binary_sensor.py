@@ -102,9 +102,9 @@ BINARY_SENSOR_TYPES: tuple[IndygoBinarySensorEntityDescription, ...] = (
         is_pool_status=True,
     ),
     IndygoBinarySensorEntityDescription(
-        key="cover_open",
-        translation_key="cover",
-        device_class=BinarySensorDeviceClass.OPENING,
+        key="shutterState",
+        translation_key="shutter",
+        device_class=BinarySensorDeviceClass.WINDOW,
         is_module_sensor=True,
     ),
     IndygoBinarySensorEntityDescription(

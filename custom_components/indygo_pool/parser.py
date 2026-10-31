@@ -401,8 +401,8 @@ class IndygoParser:
         state = json_data.get("shutterState")
         if filt_module is None or not isinstance(state, int | float):
             return
-        filt_module.sensors["cover_open"] = IndygoSensorData(
-            key="cover_open", value=state == 0
+        filt_module.sensors["shutterState"] = IndygoSensorData(
+            key="shutterState", value=state == 0
         )
 
     def _parse_sensor_state(

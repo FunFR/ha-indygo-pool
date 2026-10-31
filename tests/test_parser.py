@@ -1046,21 +1046,21 @@ class TestCoverState:
 
     def test_opened(self):
         """Value 0 is an open cover, as in the MyIndygo dashboard."""
-        assert self._parse({"shutterState": 0}).sensors["cover_open"].value is True
+        assert self._parse({"shutterState": 0}).sensors["shutterState"].value is True
 
     def test_closed(self):
         """Any non-zero value is a closed cover."""
-        assert self._parse({"shutterState": 1}).sensors["cover_open"].value is False
+        assert self._parse({"shutterState": 1}).sensors["shutterState"].value is False
 
     def test_absent(self):
         """Pools without a cover input expose no cover sensor."""
-        assert "cover_open" not in self._parse({}).sensors
+        assert "shutterState" not in self._parse({}).sensors
 
     def test_non_numeric_ignored(self):
         """An unexpected payload type leaves the sensor out instead of failing."""
-        assert "cover_open" not in self._parse({"shutterState": "0"}).sensors
+        assert "shutterState" not in self._parse({"shutterState": "0"}).sensors
 
     def test_without_module(self):
         """No Pool Command module: nothing to attach the sensor to."""
         data = IndygoParser().parse_data({"shutterState": 0}, "P1", "A1", "R1")
-        assert "cover_open" not in data.sensors
+        assert "shutterState" not in data.sensors
