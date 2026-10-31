@@ -102,6 +102,12 @@ BINARY_SENSOR_TYPES: tuple[IndygoBinarySensorEntityDescription, ...] = (
         is_pool_status=True,
     ),
     IndygoBinarySensorEntityDescription(
+        key="shutterState",
+        translation_key="shutter",
+        device_class=BinarySensorDeviceClass.WINDOW,
+        is_module_sensor=True,
+    ),
+    IndygoBinarySensorEntityDescription(
         key="pump_boost",
         translation_key="pump_boost",
         icon="mdi:rocket-launch",
