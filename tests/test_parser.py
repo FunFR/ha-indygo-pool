@@ -1034,8 +1034,8 @@ class TestVariableSpeedPump:
         assert module.sensors["pump_boost"].value is False
 
 
-class TestCoverState:
-    """The cover wired to the Pool Command is reported by the pool status."""
+class TestShutterState:
+    """The shutter wired to the Pool Command is reported by the pool status."""
 
     def _parse(self, extra: dict):
         json_data = {
@@ -1045,15 +1045,15 @@ class TestCoverState:
         return IndygoParser().parse_data(json_data, "P1", "A1", "R1").modules["PC"]
 
     def test_opened(self):
-        """Value 0 is an open cover, as in the MyIndygo dashboard."""
+        """Value 0 is an open shutter, as in the MyIndygo dashboard."""
         assert self._parse({"shutterState": 0}).sensors["shutterState"].value is True
 
     def test_closed(self):
-        """Any non-zero value is a closed cover."""
+        """Any non-zero value is a closed shutter."""
         assert self._parse({"shutterState": 1}).sensors["shutterState"].value is False
 
     def test_absent(self):
-        """Pools without a cover input expose no cover sensor."""
+        """Pools without a shutter input expose no shutter sensor."""
         assert "shutterState" not in self._parse({}).sensors
 
     def test_non_numeric_ignored(self):
@@ -1064,3 +1064,32 @@ class TestCoverState:
         """No Pool Command module: nothing to attach the sensor to."""
         data = IndygoParser().parse_data({"shutterState": 0}, "P1", "A1", "R1")
         assert "shutterState" not in data.sensors
+
+    def test_boolean_ignored(self):
+        """A boolean is not a shutter state, even though it is an int subtype."""
+        assert "shutterState" not in self._parse({"shutterState": False}).sensors
+
+    def test_attached_to_pool_command_not_filtration_module(self):
+        """The shutter input belongs to the Pool Command, whatever runs filtration."""
+        json_data = {
+            "modules": [
+                {
+                    "id": "OTHER",
+                    "type": "lr-mb-10",
+                    "name": "Other",
+                    "programs": [
+                        {
+                            "programCharacteristics": {
+                                "programType": FILTRATION_PROGRAM_TYPE,
+                                "mode": MODE_AUTO,
+                            }
+                        }
+                    ],
+                },
+                {"id": "PC", "type": "lr-pc", "name": "LRPC"},
+            ],
+            "shutterState": 0,
+        }
+        data = IndygoParser().parse_data(json_data, "P1", "A1", "R1")
+        assert data.modules["PC"].sensors["shutterState"].value is True
+        assert "shutterState" not in data.modules["OTHER"].sensors
