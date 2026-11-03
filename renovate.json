@@ -6,7 +6,6 @@
     "semanticCommits": "enabled",
     "timezone": "Europe/Paris",
     "dependencyDashboard": true,
-    "rebaseWhen": "conflicted",
     "pre-commit": {
         "enabled": true
     },
