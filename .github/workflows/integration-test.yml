@@ -40,10 +40,11 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
-      - name: "Set up Python"
-        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
-        with:
-          python-version-file: ".python-version"
+      # Home Assistant sets the floor; newer Python series lack wheels for its pins.
+      - name: Use the Python series of the requires-python floor
+        run: |
+          floor="$(uv run --no-project --with packaging python scripts/print_requires_python_floor.py)"
+          echo "UV_PYTHON=${floor%.*}" >> "$GITHUB_ENV"
       - name: Install dependencies
         run: uv sync --all-extras --all-groups --frozen
       - name: Run integration tests against real MyIndygo API
