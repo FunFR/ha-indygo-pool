@@ -70,5 +70,5 @@ jobs:
           echo "UV_PYTHON=${floor%.*}" >> "$GITHUB_ENV"
       - name: Scan dev dependencies for known vulnerabilities
         run: |
-          uv export --only-group dev --no-hashes --no-emit-project -o requirements-audit.txt
+          uv export --all-extras --all-groups --no-hashes --no-emit-project -o requirements-audit.txt
           uv run --frozen pip-audit -r requirements-audit.txt --disable-pip --no-deps
