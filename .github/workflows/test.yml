@@ -5,6 +5,8 @@ on:
     branches: [ main ]
   push:
     branches: [ main ]
+  schedule:
+    - cron: '0 5 * * *'
   workflow_dispatch:
 
 permissions:
@@ -21,10 +23,12 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
-      - name: "Set up Python"
-        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
-        with:
-          python-version-file: "pyproject.toml"
+      # Home Assistant sets the floor; newer Python series lack wheels for its pins.
+      - name: Use the Python series of the requires-python floor
+        run: |
+          floor="$(uv run --no-project --with packaging python scripts/print_requires_python_floor.py)"
+          echo "FLOOR=$floor" >> "$GITHUB_ENV"
+          echo "UV_PYTHON=${floor%.*}" >> "$GITHUB_ENV"
       - name: Install dependencies
         run: uv sync --all-extras --all-groups --frozen
       - name: Lint with ruff
@@ -33,23 +37,38 @@ jobs:
         run: uv run ruff format --check .
       - name: Check types with mypy
         run: uv run mypy custom_components/indygo_pool
-      - name: Scan dev dependencies for known vulnerabilities
-        run: |
-          uv export --only-group dev --no-hashes --no-emit-project -o requirements-audit.txt
-          uv run pip-audit -r requirements-audit.txt --disable-pip --no-deps
       - name: Run tests with coverage
         run: uv run pytest -m "not integration"
-      - name: Determine declared requires-python floor
-        id: floor
-        run: echo "version=$(uv run python scripts/print_requires_python_floor.py)" >> "$GITHUB_OUTPUT"
       - name: Verify the declared floor actually resolves
         run: |
-          uv python install "${{ steps.floor.outputs.version }}"
-          uv sync --all-extras --all-groups --frozen --python "${{ steps.floor.outputs.version }}"
-          uv run --python "${{ steps.floor.outputs.version }}" pytest -m "not integration"
+          uv python install "$FLOOR"
+          uv sync --all-extras --all-groups --frozen --python "$FLOOR"
+          uv run --python "$FLOOR" pytest -m "not integration"
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.xml
           fail_ci_if_error: false
+
+  # Not run on pull requests: a vulnerability in a version Home Assistant pins
+  # can only wait for its upstream fix and must not hold dependency updates.
+  audit:
+    name: Audit
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - name: Use the Python series of the requires-python floor
+        run: |
+          floor="$(uv run --no-project --with packaging python scripts/print_requires_python_floor.py)"
+          echo "UV_PYTHON=${floor%.*}" >> "$GITHUB_ENV"
+      - name: Scan dev dependencies for known vulnerabilities
+        run: |
+          uv export --only-group dev --no-hashes --no-emit-project -o requirements-audit.txt
+          uv run --frozen pip-audit -r requirements-audit.txt --disable-pip --no-deps
