@@ -5,7 +5,9 @@
     ],
     "semanticCommits": "enabled",
     "timezone": "Europe/Paris",
-    "dependencyDashboard": true,
+    "dependencyDashboard": {
+        "enabled": true
+    },
     "pre-commit": {
         "enabled": true
     },
