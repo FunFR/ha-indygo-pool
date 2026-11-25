@@ -6,6 +6,10 @@ import pytest
 from homeassistant.exceptions import HomeAssistantError
 
 from custom_components.indygo_pool.coordinator import IndygoPoolDataUpdateCoordinator
+from custom_components.indygo_pool.entity import (
+    async_set_electrolyser,
+    filtration_is_stopped,
+)
 from custom_components.indygo_pool.models import (
     IndygoModuleData,
     IndygoPoolData,
@@ -227,3 +231,65 @@ async def test_production_setpoint_sensor_raises_a_repair_issue():
 
     issue = ir.async_create_issue.call_args
     assert issue.kwargs["translation_key"] == "deprecated_production_setpoint_sensor"
+
+
+# --- edge cases ----------------------------------------------------------
+
+
+def test_filtration_state_unknown_does_not_block():
+    """Without data or a filtration module, writes are not refused."""
+    assert not filtration_is_stopped(None)
+    assert not filtration_is_stopped(IndygoPoolData(pool_id="p"))
+
+
+@pytest.mark.asyncio
+async def test_write_without_electrolyser_raises():
+    module = IndygoModuleData(id="ipx1", type="ipx", name="IPX")
+
+    with pytest.raises(HomeAssistantError) as err:
+        await async_set_electrolyser(_coordinator(module), module, {})
+
+    assert err.value.translation_key == "electrolyser_not_found"
+
+
+@pytest.mark.asyncio
+async def test_entities_without_settings():
+    """A module that lost its electrolyser output reads nothing."""
+    coordinator = _coordinator(_ipx_module(percentageSetpoint=None))
+    number = IndygoPoolProductionSetpointNumber(coordinator, "ipx1")
+    boost = IndygoPoolElectrolyserBoostSelect(coordinator, "ipx1", "IPX")
+    coordinator.data.modules["ipx1"].raw_data["outputs"] = []
+
+    assert number.native_value is None
+    assert not boost.available
+    assert boost.current_option is None
+
+    coordinator.data.modules.clear()
+    await number.async_set_native_value(40.0)
+    coordinator.client.async_set_ipx_data.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_deprecation_issue_dropped_on_removal():
+    description = next(d for d in SENSOR_TYPES if d.key == "production_setpoint")
+    entity = IndygoPoolSensor(_coordinator(_ipx_module()), description, "ipx1")
+    entity.hass = MagicMock()
+
+    with (
+        patch("custom_components.indygo_pool.sensor.ir") as ir,
+        patch(
+            "homeassistant.helpers.update_coordinator.CoordinatorEntity.async_will_remove_from_hass",
+            AsyncMock(),
+        ),
+    ):
+        await entity.async_will_remove_from_hass()
+
+    ir.async_delete_issue.assert_called_once()
+
+
+def test_setpoint_without_coordinator_data():
+    coordinator = _coordinator(_ipx_module())
+    entity = IndygoPoolProductionSetpointNumber(coordinator, "ipx1")
+    coordinator.data = None
+
+    assert entity.native_value is None
