@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from .const import VARIABLE_SPEED_MODULE_PREFIX
+from .const import INPUT_TYPE_REDOX, VARIABLE_SPEED_MODULE_PREFIX
 
 
 @dataclass
@@ -34,6 +34,31 @@ class IndygoModuleData:
     def has_variable_speed(self) -> bool:
         """Return True when the filtration pump runs at variable speed."""
         return self.type.startswith(VARIABLE_SPEED_MODULE_PREFIX)
+
+    @property
+    def electrolyser_output(self) -> dict[str, Any] | None:
+        """Return the IPX output driving the electrolyser, if any."""
+        return next(
+            (
+                output
+                for output in self.raw_data.get("outputs", [])
+                if "electrolyzerMode" in (output.get("ipxData") or {})
+            ),
+            None,
+        )
+
+    @property
+    def electrolyser_settings(self) -> dict[str, Any]:
+        """Return the live settings of the electrolyser output."""
+        return (self.electrolyser_output or {}).get("ipxData") or {}
+
+    @property
+    def has_redox_input(self) -> bool:
+        """Return True when a redox sensor is wired to the module."""
+        return any(
+            item.get("type") == INPUT_TYPE_REDOX
+            for item in self.raw_data.get("inputs", [])
+        )
 
 
 @dataclass

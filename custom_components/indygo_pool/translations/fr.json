@@ -66,7 +66,7 @@
                 "name": "Consigne pH"
             },
             "production_setpoint": {
-                "name": "Consigne production"
+                "name": "Consigne production (obsolète)"
             },
             "electrolyzer_mode": {
                 "name": "Mode électrolyseur"
@@ -172,6 +172,22 @@
                     "speed_2": "V2",
                     "speed_3": "V3"
                 }
+            },
+            "electrolyser_mode": {
+                "name": "Mode de l'électrolyseur",
+                "state": {
+                    "off": "Arrêt",
+                    "percentage": "Pourcentage",
+                    "auto": "Auto (redox)"
+                }
+            },
+            "electrolyser_boost": {
+                "name": "Boost de l'électrolyseur",
+                "state": {
+                    "off": "Arrêt",
+                    "12h": "12 h",
+                    "24h": "24 h"
+                }
             }
         },
         "switch": {
@@ -181,6 +197,25 @@
             "auxiliary_circuit": {
                 "name": "{circuit}"
             }
+        },
+        "number": {
+            "production_setpoint": {
+                "name": "Consigne de production"
+            }
+        }
+    },
+    "exceptions": {
+        "filtration_stopped": {
+            "message": "L'électrolyseur ne peut pas être modifié tant que la filtration est arrêtée."
+        },
+        "electrolyser_not_found": {
+            "message": "Aucun électrolyseur trouvé sur ce module."
+        }
+    },
+    "issues": {
+        "deprecated_production_setpoint_sensor": {
+            "title": "Le capteur de consigne de production est obsolète",
+            "description": "Le capteur `{entity_id}` est remplacé par l'entité number Consigne de production, qui permet aussi de modifier la valeur. Mettez à jour vos tableaux de bord et automatisations, puis désactivez ce capteur. Il sera supprimé à la prochaine version majeure."
         }
     }
 }

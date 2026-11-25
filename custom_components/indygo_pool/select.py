@@ -12,6 +12,9 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from .const import (
     BOOST_DEFAULT_SPEED,
     DOMAIN,
+    ELECTROLYSER_MODE_AUTO,
+    ELECTROLYSER_MODE_OFF,
+    ELECTROLYSER_MODE_PERCENTAGE,
     LOGGER,
     ON_SPEED_FIELD,
     PROGRAM_RULE_SCHEDULE,
@@ -22,7 +25,7 @@ from .const import (
     VARIABLE_SPEED_FIELD,
 )
 from .coordinator import IndygoPoolDataUpdateCoordinator
-from .entity import IndygoPoolEntity
+from .entity import IndygoPoolEntity, async_set_electrolyser
 from .models import IndygoModuleData
 
 # Delay (seconds) before a follow-up refresh after a mode change.
@@ -72,6 +75,14 @@ async def async_setup_entry(
         return
 
     for module_id, module in coordinator.data.modules.items():
+        if module.electrolyser_output:
+            entities.extend(
+                entity_class(coordinator, module_id, module.name)
+                for entity_class in (
+                    IndygoPoolElectrolyserModeSelect,
+                    IndygoPoolElectrolyserBoostSelect,
+                )
+            )
         if not module.filtration_program:
             continue
         characteristics = module.filtration_program.get("programCharacteristics", {})
@@ -363,3 +374,126 @@ class IndygoPoolBoostSpeedSelect(IndygoPoolEntity, SelectEntity, RestoreEntity):
     def _set_speed(self, option: str) -> None:
         if self._module_id:
             self.coordinator.boost_speeds[self._module_id] = SPEED_TO_INT[option]
+
+
+ELECTROLYSER_MODE_TO_INT = {
+    "off": ELECTROLYSER_MODE_OFF,
+    "percentage": ELECTROLYSER_MODE_PERCENTAGE,
+    "auto": ELECTROLYSER_MODE_AUTO,
+}
+
+# Electrolyser boost durations (hours) offered by the app; 0 cancels it.
+ELECTROLYSER_BOOST_TO_HOURS = {"off": 0, "12h": 12, "24h": 24}
+
+
+class IndygoPoolElectrolyserSelect(IndygoPoolCommandSelect):
+    """Select changing a setting of the IPX electrolyser."""
+
+    _attr_icon = "mdi:water-plus"
+
+    def _ipx_data(self) -> dict:
+        """Return the live settings of the electrolyser output."""
+        module = self._get_module()
+        return module.electrolyser_settings if module else {}
+
+    @property
+    def available(self) -> bool:
+        """Return False once the electrolyser output disappears."""
+        return super().available and bool(self._ipx_data())
+
+
+class IndygoPoolElectrolyserModeSelect(IndygoPoolElectrolyserSelect):
+    """Electrolyser mode (off, percentage, auto).
+
+    AUTO regulates on a redox sensor, so it is offered only with one.
+    """
+
+    _key = "electrolyser_mode"
+
+    def __init__(
+        self,
+        coordinator: IndygoPoolDataUpdateCoordinator,
+        module_id: str,
+        module_name: str,
+    ) -> None:
+        """Initialize."""
+        module = coordinator.data.modules.get(module_id)
+        current = (
+            module.electrolyser_settings.get("electrolyzerMode") if module else None
+        )
+        offer_auto = bool(module and module.has_redox_input) or (
+            current == ELECTROLYSER_MODE_AUTO
+        )
+        self._option_to_int = {
+            option: mode
+            for option, mode in ELECTROLYSER_MODE_TO_INT.items()
+            if offer_auto or mode != ELECTROLYSER_MODE_AUTO
+        }
+        super().__init__(coordinator, module_id, module_name)
+
+    @property
+    def current_option(self) -> str | None:
+        """Return the mode reported by the electrolyser."""
+        value = self._ipx_data().get("electrolyzerMode")
+        return next(
+            (opt for opt, mode in ELECTROLYSER_MODE_TO_INT.items() if mode == value),
+            None,
+        )
+
+    async def _async_send(self, module: IndygoModuleData, value: int) -> bool:
+        """Switch the electrolyser mode."""
+        await async_set_electrolyser(
+            self.coordinator, module, {"electrolyzerMode": value}
+        )
+        return True
+
+
+class IndygoPoolElectrolyserBoostSelect(IndygoPoolElectrolyserSelect):
+    """Electrolyser boost: pick a duration to start it, off to cancel it.
+
+    The live data only gives the time left, so a running boost shows the
+    shortest duration covering it.
+    """
+
+    _key = "electrolyser_boost"
+    _option_to_int = ELECTROLYSER_BOOST_TO_HOURS
+    _attr_icon = "mdi:rocket-launch"
+
+    def _remaining_minutes(self) -> int:
+        """Return the time left on the running boost.
+
+        Observed: a cancelled boost keeps its last remaining time, so the
+        time only counts while the boost is enabled.
+        """
+        ipx_data = self._ipx_data()
+        remaining = ipx_data.get("boostRemainingTime")
+        if not ipx_data.get("boostEnabled") or not isinstance(remaining, int):
+            return 0
+        return remaining
+
+    @property
+    def current_option(self) -> str | None:
+        """Return off, or the duration of the running boost."""
+        if "boostEnabled" not in self._ipx_data():
+            return None
+        minutes = self._remaining_minutes()
+        if not minutes:
+            return "off"
+        return next(
+            (
+                opt
+                for opt, hours in ELECTROLYSER_BOOST_TO_HOURS.items()
+                if hours * 60 >= minutes
+            ),
+            None,
+        )
+
+    @property
+    def extra_state_attributes(self) -> dict[str, int]:
+        """Expose the time left on the running boost, in minutes."""
+        return {"remaining_minutes": self._remaining_minutes()}
+
+    async def _async_send(self, module: IndygoModuleData, value: int) -> bool:
+        """Start a boost of ``value`` hours, or cancel it when 0."""
+        await async_set_electrolyser(self.coordinator, module, {"boostCommand": value})
+        return True

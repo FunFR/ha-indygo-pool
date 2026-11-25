@@ -56,3 +56,11 @@ BOOST_DEFAULT_SPEED = 2
 
 # Live speed reported by variable-speed pumps in pool[0].value.
 PUMP_SPEED_STATES = {0: "stopped", 1: "speed_1", 2: "speed_2", 3: "speed_3"}
+
+# ipxData.electrolyzerMode values of an IPX electrolyser output.
+ELECTROLYSER_MODE_OFF = 0
+ELECTROLYSER_MODE_PERCENTAGE = 1
+ELECTROLYSER_MODE_AUTO = 2
+
+# Input type of a redox sensor: AUTO regulation needs one.
+INPUT_TYPE_REDOX = 7
