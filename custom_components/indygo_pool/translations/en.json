@@ -66,7 +66,7 @@
                 "name": "pH setpoint"
             },
             "production_setpoint": {
-                "name": "Production setpoint"
+                "name": "Production setpoint (deprecated)"
             },
             "electrolyzer_mode": {
                 "name": "Electrolyzer mode"
@@ -172,6 +172,22 @@
                     "speed_2": "V2",
                     "speed_3": "V3"
                 }
+            },
+            "electrolyser_mode": {
+                "name": "Electrolyser mode",
+                "state": {
+                    "off": "Off",
+                    "percentage": "Percentage",
+                    "auto": "Auto (redox)"
+                }
+            },
+            "electrolyser_boost": {
+                "name": "Electrolyser boost",
+                "state": {
+                    "off": "Off",
+                    "12h": "12 h",
+                    "24h": "24 h"
+                }
             }
         },
         "switch": {
@@ -181,6 +197,25 @@
             "auxiliary_circuit": {
                 "name": "{circuit}"
             }
+        },
+        "number": {
+            "production_setpoint": {
+                "name": "Production setpoint"
+            }
+        }
+    },
+    "exceptions": {
+        "filtration_stopped": {
+            "message": "The electrolyser cannot be changed while the filtration is stopped."
+        },
+        "electrolyser_not_found": {
+            "message": "No electrolyser found on this module."
+        }
+    },
+    "issues": {
+        "deprecated_production_setpoint_sensor": {
+            "title": "Production setpoint sensor is deprecated",
+            "description": "The sensor `{entity_id}` is replaced by the Production setpoint number entity, which also lets you change the value. Update your dashboards and automations, then disable this sensor. It will be removed in the next major version."
         }
     }
 }

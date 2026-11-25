@@ -1125,3 +1125,39 @@ async def test_device_push_carries_module_speed_keys_on_pump_program():
             "json"
         ]["programs"][0]["programCharacteristics"]
         assert not module_keys & stored.keys()
+
+
+IPX_OUTPUT_URL = "https://myindygo.com/api/outputs/out2/ipxData"
+
+
+@pytest.mark.asyncio
+async def test_set_ipx_data():
+    """Electrolyser settings go to the IPX output, wrapped like the app does."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    with aioresponses() as m:
+        m.post(IPX_OUTPUT_URL, payload={})
+        async with aiohttp.ClientSession() as session:
+            await _make_client(session).async_set_ipx_data(
+                "out2", {"percentageSetpoint": 40}
+            )
+
+        payload = m.requests[("POST", URL(IPX_OUTPUT_URL))][0].kwargs["json"]
+
+    assert payload == {"ipxData": {"percentageSetpoint": 40}}
+
+
+@pytest.mark.asyncio
+async def test_set_ipx_data_rejected():
+    """An error in the answer is raised, not taken as applied."""
+    if aioresponses is None:
+        pytest.skip("aioresponses not installed")
+
+    with aioresponses() as m:
+        m.post(IPX_OUTPUT_URL, payload={"error": "bad value"})
+        async with aiohttp.ClientSession() as session:
+            with pytest.raises(IndygoPoolApiClientError, match="bad value"):
+                await _make_client(session).async_set_ipx_data(
+                    "out2", {"percentageSetpoint": 140}
+                )

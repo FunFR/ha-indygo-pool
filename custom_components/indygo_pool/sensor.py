@@ -20,6 +20,7 @@ from homeassistant.const import (
     UnitOfTime,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import slugify
 
@@ -27,6 +28,10 @@ from .const import DOMAIN, PUMP_SPEED_STATES
 from .coordinator import IndygoPoolDataUpdateCoordinator
 from .entity import IndygoPoolEntity
 from .models import IndygoSensorData
+
+# Sensor key -> repair issue translation key. Superseded by a control entity,
+# kept until the next major version.
+DEPRECATED_SENSORS = {"production_setpoint": "deprecated_production_setpoint_sensor"}
 
 
 @dataclass(frozen=True)
@@ -203,3 +208,27 @@ class IndygoPoolSensor(IndygoPoolEntity, SensorEntity):
         """Return the state attributes."""
         sensor = self._get_sensor_data()
         return sensor.extra_attributes if sensor else None
+
+    async def async_added_to_hass(self) -> None:
+        """Warn the user when an enabled sensor is deprecated."""
+        await super().async_added_to_hass()
+        if self.entity_description.key in DEPRECATED_SENSORS:
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                self._deprecation_issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key=DEPRECATED_SENSORS[self.entity_description.key],
+                translation_placeholders={"entity_id": self.entity_id},
+            )
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Drop the deprecation warning once the sensor is disabled or removed."""
+        if self.entity_description.key in DEPRECATED_SENSORS:
+            ir.async_delete_issue(self.hass, DOMAIN, self._deprecation_issue_id)
+        await super().async_will_remove_from_hass()
+
+    @property
+    def _deprecation_issue_id(self) -> str:
+        return f"deprecated_{self.unique_id}"

@@ -597,6 +597,25 @@ class IndygoPoolApiClient:
             payload,
         )
 
+    # ------------------------------------------------------------------
+    # IPX output settings  (electrolyser)
+    # ------------------------------------------------------------------
+
+    async def async_set_ipx_data(self, output_id: str, settings: dict) -> None:
+        """Change settings of an IPX output, the way the MyIndygo app does.
+
+        The app sends one setting per call (``electrolyzerMode``,
+        ``percentageSetpoint`` or ``boostCommand``).
+        """
+        LOGGER.debug("Sending IPX settings to output %s: %s", output_id, settings)
+        answer = await self._api_post(
+            f"/api/outputs/{output_id}/ipxData", {"ipxData": settings}
+        )
+        if isinstance(answer, dict) and "error" in answer:
+            raise IndygoPoolApiClientError(
+                f"IPX output rejected the settings: {answer['error']}"
+            )
+
     async def async_synchronize_lorawan(
         self, module_id: str, send_program: bool = True, send_command: bool = True
     ) -> None:
